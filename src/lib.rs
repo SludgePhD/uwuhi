@@ -1,6 +1,4 @@
 //! Unicast and Multicast DNS and DNS Service Discovery implementation.
-//!
-//! [404]
 
 #![forbid(unaligned_references)]
 
