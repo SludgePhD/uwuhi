@@ -56,8 +56,9 @@ impl Resolver {
 
     /// Adds another server to be contacted by this resolver.
     ///
-    /// Calling [`Resolver::resolve_hostname`] will send a query to every server in this list. The
-    /// first response containing at least one resolved IP address will be returned.
+    /// Calling [`Resolver::resolve`] or [`Resolver::resolve_domain`] will send a query to every
+    /// server in this list. The first response containing at least one resolved IP address will be
+    /// returned.
     ///
     /// # Panics
     ///
