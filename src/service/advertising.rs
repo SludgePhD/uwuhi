@@ -27,7 +27,7 @@ impl ServiceAdvertiser {
     /// Creates a new service advertiser that uses the domain `hostname.local`.
     ///
     /// `hostname` should be different from the system host name, to avoid conflicts with other
-    /// installed mDNS resolvers.
+    /// installed mDNS responders.
     pub fn new(hostname: Label, addr: Ipv4Addr) -> io::Result<Self> {
         let sock = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
         sock.set_reuse_address(true)?;
@@ -104,7 +104,14 @@ impl ServiceAdvertiser {
         ));
     }
 
-    pub fn listen(self) -> io::Result<()> {
+    pub fn socket(&self) -> &UdpSocket {
+        &self.sock
+    }
+
+    /// Starts listening for and responding to queries.
+    ///
+    /// This method will not return, except when an error occurs.
+    pub fn listen(&self) -> io::Result<()> {
         let mut recv_buf = [0; MDNS_BUFFER_SIZE];
         loop {
             let (len, addr) = self.sock.recv_from(&mut recv_buf)?;

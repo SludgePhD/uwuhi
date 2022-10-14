@@ -5,7 +5,6 @@ use std::{
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     ops::ControlFlow,
-    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
@@ -21,28 +20,7 @@ use crate::MDNS_BUFFER_SIZE;
 
 use super::{InstanceDetails, Service, ServiceInstance, TxtRecords};
 
-/// An mDNS service discoverer that runs in a background thread.
-pub struct BackgroundDiscoverer {
-    worker: Option<JoinHandle<()>>,
-}
-
-impl Drop for BackgroundDiscoverer {
-    fn drop(&mut self) {
-        self.worker.take().unwrap().join().ok();
-    }
-}
-
-impl BackgroundDiscoverer {
-    pub fn new() -> Self {
-        let handle = thread::spawn(move || {});
-
-        Self {
-            worker: Some(handle),
-        }
-    }
-}
-
-/// A simple, synchronous mDNS service discoverer.
+/// A simple, synchronous DNS service discoverer.
 pub struct SimpleDiscoverer {
     sock: UdpSocket,
     server: SocketAddr,
@@ -54,7 +32,7 @@ impl SimpleDiscoverer {
     const DEFAULT_RETRANSMIT_TIMEOUT: Duration = Duration::from_millis(300);
     const DEFAULT_DISCOVERY_TIMEOUT: Duration = Duration::from_millis(1000);
 
-    /// Creates a new service browser that will request services of `domain` from the given DNS
+    /// Creates a new service discoverer that will request services of `domain` from the given DNS
     /// server.
     pub fn new(server: SocketAddr, domain: DomainName) -> io::Result<Self> {
         let bind_addr: SocketAddr = if server.is_ipv6() {
@@ -72,7 +50,7 @@ impl SimpleDiscoverer {
         Ok(this)
     }
 
-    /// Creates an mDNS-SD browser that will browse the `.local` service domain.
+    /// Creates an mDNS service discoverer that will browse the `.local` service domain.
     pub fn new_multicast_v4() -> io::Result<Self> {
         Self::new(
             "224.0.0.251:5353".parse().unwrap(),
@@ -96,6 +74,11 @@ impl SimpleDiscoverer {
         Ok(())
     }
 
+    /// Requests the [`InstanceDetails`] associated with a specific [`ServiceInstance`] from the
+    /// server.
+    ///
+    /// The [`InstanceDetails`] contain hostname and port where the [`ServiceInstance`] can be
+    /// reached as well as service-specific metadata (which may be omitted).
     pub fn load_instance_details(
         &mut self,
         instance: &ServiceInstance,
@@ -154,6 +137,9 @@ impl SimpleDiscoverer {
     }
 
     /// Starts service discovery and invokes `callback` with every discovered instance of `service`.
+    ///
+    /// The `callback` can control whether to keep discovering instances or to exit the discovery
+    /// loop by returning a [`ControlFlow`] value.
     pub fn discover_instances<C>(&mut self, service: &Service, mut callback: C) -> io::Result<()>
     where
         C: FnMut(&ServiceInstance) -> ControlFlow<()>,

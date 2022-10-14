@@ -101,6 +101,7 @@ impl fmt::Debug for Service {
     }
 }
 
+/// A named instance of a [`Service`].
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ServiceInstance {
     instance_name: Label,
@@ -108,10 +109,24 @@ pub struct ServiceInstance {
 }
 
 impl ServiceInstance {
-    pub fn new(instance_name: Label, service: Label, transport: ServiceTransport) -> Self {
+    /// Creates a new [`ServiceInstance`] from its components.
+    ///
+    /// `instance_name` can be a free-form string, typically identifying the machine the service is
+    /// running on.
+    ///
+    /// `service_name` must start with an underscore and is an agreed-upon identifier for the
+    /// service being offered.
+    pub fn new(instance_name: Label, service_name: Label, transport: ServiceTransport) -> Self {
         Self {
             instance_name,
-            service: Service::new(service, transport),
+            service: Service::new(service_name, transport),
+        }
+    }
+
+    pub fn from_service(instance_name: Label, service: Service) -> Self {
+        Self {
+            instance_name,
+            service,
         }
     }
 

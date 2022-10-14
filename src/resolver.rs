@@ -94,11 +94,22 @@ impl Resolver {
     ///
     /// The resolver does not perform recursive resolution (it is a "stub resolver"). It does set
     /// the `RD` bit in the query, which instructs the server to perform recursion.
-    pub fn resolve_hostname(&mut self, hostname: &str) -> io::Result<IpAddrIter<'_>> {
+    pub fn resolve(&mut self, hostname: &str) -> io::Result<IpAddrIter<'_>> {
+        let name = DomainName::from_str(&hostname)?;
+        self.resolve_domain(&name)
+    }
+
+    /// Attempts to resolve a [`DomainName`] using the configured DNS servers.
+    ///
+    /// If the query times out, an error of type [`io::ErrorKind::WouldBlock`] or
+    /// [`io::ErrorKind::TimedOut`] will be returned.
+    ///
+    /// The resolver does not perform recursive resolution (it is a "stub resolver"). It does set
+    /// the `RD` bit in the query, which instructs the server to perform recursion.
+    pub fn resolve_domain(&mut self, name: &DomainName) -> io::Result<IpAddrIter<'_>> {
         self.ip_buf.clear();
 
         let mut send_buf = [0; MDNS_BUFFER_SIZE];
-        let name = DomainName::from_str(&hostname)?;
         let mut header = Header::default();
         header.set_recursion_desired(true);
         header.set_id(12345);
@@ -109,7 +120,7 @@ impl Resolver {
         let bytes = enc.finish().unwrap();
         let data = &send_buf[..bytes];
 
-        log::trace!("resolving '{}', raw query: {:x?}", hostname, data);
+        log::trace!("resolving '{}', raw query: {:x?}", name, data);
 
         // FIXME: retransmit
         for addr in &self.servers {

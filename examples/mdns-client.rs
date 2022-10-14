@@ -16,7 +16,7 @@ fn main() -> io::Result<()> {
         .filter_module(env!("CARGO_CRATE_NAME"), LevelFilter::Trace)
         .init();
     let mut client = Resolver::new_multicast_v4()?;
-    let ips = client.resolve_hostname(&hostname)?;
+    let ips = client.resolve(&hostname)?;
     for ip in ips {
         println!("Received IP: {}", ip);
     }
