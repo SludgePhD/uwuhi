@@ -1,6 +1,6 @@
 use std::{
     io,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
+    net::{Ipv4Addr, SocketAddrV4, UdpSocket},
 };
 
 use crate::packet::{
@@ -19,8 +19,8 @@ use super::{InstanceDetails, ServiceInstance, TxtRecordValue};
 /// mDNS service advertiser and name server.
 pub struct ServiceAdvertiser {
     discovery_domain: DomainName,
-    sock: UdpSocket,
     db: RecordDb,
+    response_buf: Vec<u8>,
 }
 
 impl ServiceAdvertiser {
@@ -29,13 +29,6 @@ impl ServiceAdvertiser {
     /// `hostname` should be different from the system host name, to avoid conflicts with other
     /// installed mDNS responders.
     pub fn new(hostname: Label, addr: Ipv4Addr) -> io::Result<Self> {
-        let sock = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
-        sock.set_reuse_address(true)?;
-        sock.bind(&SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 5353).into())?;
-
-        let sock = UdpSocket::from(sock);
-        sock.join_multicast_v4(&"224.0.0.251".parse().unwrap(), &Ipv4Addr::UNSPECIFIED)?;
-
         let mut host_and_domain = DomainName::from_iter([hostname]);
         host_and_domain.push_label(Label::new("local"));
 
@@ -47,8 +40,8 @@ impl ServiceAdvertiser {
 
         Ok(Self {
             discovery_domain: DomainName::from_str("_services._dns-sd._udp.local.").unwrap(),
-            sock,
             db,
+            response_buf: vec![0; MDNS_BUFFER_SIZE],
         })
     }
 
@@ -104,23 +97,41 @@ impl ServiceAdvertiser {
         ));
     }
 
-    pub fn socket(&self) -> &UdpSocket {
-        &self.sock
+    /// Creates a correctly configured [`UdpSocket`] to listen for mDNS queries to this advertiser.
+    ///
+    /// The returned socket will be in blocking mode, and can coexist with existing sockets
+    /// listening on the same port.
+    ///
+    /// When receiving data using the returned [`UdpSocket`], a receive buffer with a size of at
+    /// least [`MDNS_BUFFER_SIZE`] must be used, otherwise incoming mDNS queries may get truncated.
+    pub fn create_socket(&self) -> io::Result<UdpSocket> {
+        let sock = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+        sock.set_reuse_address(true)?;
+        sock.bind(&SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 5353).into())?;
+
+        let sock = UdpSocket::from(sock);
+        sock.join_multicast_v4(&"224.0.0.251".parse().unwrap(), &Ipv4Addr::UNSPECIFIED)?;
+
+        Ok(sock)
     }
 
     /// Starts listening for and responding to queries.
     ///
-    /// This method will not return, except when an error occurs.
-    pub fn listen(&self) -> io::Result<()> {
+    /// This method will block forever and never return, except when an error occurs.
+    pub fn listen_blocking(&mut self) -> io::Result<()> {
+        let sock = self.create_socket()?;
         let mut recv_buf = [0; MDNS_BUFFER_SIZE];
         loop {
-            let (len, addr) = self.sock.recv_from(&mut recv_buf)?;
+            let (len, addr) = sock.recv_from(&mut recv_buf)?;
             let packet = &recv_buf[..len];
 
             log::trace!("raw recv from {}: {:x?}", addr, packet);
 
-            match self.handle_packet(addr, packet) {
-                Ok(()) => {}
+            match self.handle_packet(packet) {
+                Ok(Some(resp)) => {
+                    sock.send_to(resp, addr)?;
+                }
+                Ok(None) => {}
                 Err(e) => {
                     log::debug!("failed to handle packet: {}", e);
                 }
@@ -128,24 +139,28 @@ impl ServiceAdvertiser {
         }
     }
 
-    fn handle_packet(&self, sender: SocketAddr, packet: &[u8]) -> io::Result<()> {
+    /// Handles an incoming mDNS packet, and returns a response for it (if any).
+    ///
+    /// This method does not perform I/O by itself, so it can be used in a *sans-io* fashion to
+    /// build an async mDNS advertiser. If that's not needed, [`ServiceAdvertiser::listen_blocking`]
+    /// can be called instead.
+    pub fn handle_packet(&mut self, packet: &[u8]) -> io::Result<Option<&[u8]>> {
         let mut dec = MessageDecoder::new(packet)?;
         if !dec.header().is_query() {
-            return Ok(());
+            return Ok(None);
         }
         if dec.header().opcode() != Opcode::QUERY {
-            return Ok(());
+            return Ok(None);
         }
         if dec.header().rcode() != RCode::NO_ERROR {
-            return Ok(());
+            return Ok(None);
         }
 
         let mut header = Header::default();
         header.set_id(dec.header().id());
         header.set_response(true);
         header.set_authority(true);
-        let mut response_buf = [0; MDNS_BUFFER_SIZE];
-        let mut enc = MessageEncoder::new(&mut response_buf);
+        let mut enc = MessageEncoder::new(&mut *self.response_buf);
         enc.set_header(header);
         let mut enc = enc.answers();
 
@@ -176,12 +191,11 @@ impl ServiceAdvertiser {
         }
 
         if have_relevant_answer {
-            let len = enc.finish().ok().unwrap_or(response_buf.len()); // truncated replies should still get sent
-            let resp = &response_buf[..len];
-            self.sock.send_to(resp, sender)?;
+            let len = enc.finish().ok().unwrap_or(self.response_buf.len()); // truncated replies should still get sent
+            Ok(Some(&self.response_buf[..len]))
+        } else {
+            Ok(None)
         }
-
-        Ok(())
     }
 }
 

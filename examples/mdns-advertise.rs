@@ -43,7 +43,7 @@ fn main() -> io::Result<()> {
         ),
         InstanceDetails::new("my_hostname.local".parse().unwrap(), 1234),
     );
-    advertiser.listen()?;
+    advertiser.listen_blocking()?;
 
     Ok(())
 }
