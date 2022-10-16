@@ -1,7 +1,7 @@
 use std::io;
 
 use log::LevelFilter;
-use uwuhi::resolver::Resolver;
+use uwuhi::resolver::SyncResolver;
 
 fn main() -> io::Result<()> {
     // This one requires passing the hostname to resolve as an argument (there's
@@ -15,7 +15,7 @@ fn main() -> io::Result<()> {
         .filter_module("uwuhi", LevelFilter::Trace)
         .filter_module(env!("CARGO_CRATE_NAME"), LevelFilter::Trace)
         .init();
-    let mut client = Resolver::new_multicast_v4()?;
+    let mut client = SyncResolver::new_multicast_v4()?;
     let ips = client.resolve(&hostname)?;
     for ip in ips {
         println!("Received IP: {}", ip);

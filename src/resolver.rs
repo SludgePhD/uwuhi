@@ -17,14 +17,14 @@ use crate::packet::{
 use crate::{IpAddrIter, DNS_BUFFER_SIZE, MDNS_BUFFER_SIZE};
 
 /// A simple, synchronous, non-recursive (m)DNS stub resolver.
-pub struct Resolver {
+pub struct SyncResolver {
     servers: Vec<SocketAddr>,
     sock: UdpSocket,
     ip_buf: Vec<IpAddr>,
     is_multicast: bool,
 }
 
-impl Resolver {
+impl SyncResolver {
     const DEFAULT_TIMEOUT: Duration = Duration::from_millis(500);
 
     /// Creates a new DNS resolver that will contact the given server.
@@ -56,14 +56,14 @@ impl Resolver {
 
     /// Adds another server to be contacted by this resolver.
     ///
-    /// Calling [`Resolver::resolve`] or [`Resolver::resolve_domain`] will send a query to every
-    /// server in this list. The first response containing at least one resolved IP address will be
-    /// returned.
+    /// Calling [`SyncResolver::resolve`] or [`SyncResolver::resolve_domain`] will send a query to
+    /// every server in this list. The first response containing at least one resolved IP address
+    /// will be returned.
     ///
     /// # Panics
     ///
-    /// All servers added to the same [`Resolver`] must match the family of the first server passed
-    /// to [`Resolver::new`], otherwise this method will panic.
+    /// All servers added to the same [`SyncResolver`] must match the family of the first server
+    /// passed to [`SyncResolver::new`], otherwise this method will panic.
     ///
     /// This method will also panic when called on a multicast resolver.
     pub fn add_server(&mut self, server: SocketAddr) {
@@ -111,15 +111,7 @@ impl Resolver {
         self.ip_buf.clear();
 
         let mut send_buf = [0; MDNS_BUFFER_SIZE];
-        let mut header = Header::default();
-        header.set_recursion_desired(true);
-        header.set_id(12345);
-        let mut enc = MessageEncoder::new(&mut send_buf);
-        enc.set_header(header);
-        enc.question(Question::new(&name).ty(QType::A));
-        enc.question(Question::new(&name).ty(QType::AAAA));
-        let bytes = enc.finish().unwrap();
-        let data = &send_buf[..bytes];
+        let data = make_simple_query(&mut send_buf, name);
 
         log::trace!("resolving '{}', raw query: {:x?}", name, data);
 
@@ -134,12 +126,14 @@ impl Resolver {
             let recv = &recv_buf[..b];
             log::trace!("recv from {}: {:x?}", addr, recv);
 
-            match try_decode(recv, &mut self.ip_buf) {
-                Ok(None) => {}
-                Ok(Some(_)) => {
-                    return Ok(IpAddrIter {
-                        inner: self.ip_buf.iter(),
-                    })
+            match decode_answer(recv, &mut self.ip_buf) {
+                Ok(()) => {
+                    if !self.ip_buf.is_empty() {
+                        // We return once any answer contains IP addresses.
+                        return Ok(IpAddrIter {
+                            inner: self.ip_buf.iter(),
+                        });
+                    }
                 }
                 Err(e) => {
                     log::warn!("failed to decode response from {}: {:?}", addr, e);
@@ -149,12 +143,28 @@ impl Resolver {
     }
 }
 
-fn try_decode(msg: &[u8], ip_buf: &mut Vec<IpAddr>) -> Result<Option<usize>, Error> {
+/// Writes a DNS query asking for IPv4 and IPv6 addresses of `name` into `buf`.
+///
+/// The given buffer must be large enough to fit the query, or this method will panic.
+pub fn make_simple_query<'a>(buf: &'a mut [u8], name: &'a DomainName) -> &'a [u8] {
+    let mut header = Header::default();
+    header.set_recursion_desired(true);
+    header.set_id(12345);
+    let mut enc = MessageEncoder::new(buf);
+    enc.set_header(header);
+    enc.question(Question::new(&name).ty(QType::A));
+    enc.question(Question::new(&name).ty(QType::AAAA));
+    let bytes = enc.finish().unwrap();
+    &buf[..bytes]
+}
+
+/// Decodes an answer packet from a DNS resolver, adding any contained IP addresses to `ip_buf`.
+pub fn decode_answer(msg: &[u8], ip_buf: &mut Vec<IpAddr>) -> Result<(), Error> {
     let dec = MessageDecoder::new(msg)?;
     let h = dec.header();
     log::trace!("header: {:?}", h);
     if !h.is_response() {
-        return Ok(None);
+        return Ok(());
     }
 
     for res in dec.answers()?.iter() {
@@ -168,9 +178,5 @@ fn try_decode(msg: &[u8], ip_buf: &mut Vec<IpAddr>) -> Result<Option<usize>, Err
         }
     }
 
-    if ip_buf.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(ip_buf.len()))
-    }
+    Ok(())
 }
