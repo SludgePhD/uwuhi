@@ -1,5 +1,3 @@
-//! DNS Service Discovery.
-
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     io,
@@ -21,14 +19,14 @@ use crate::MDNS_BUFFER_SIZE;
 use super::{InstanceDetails, Service, ServiceInstance, TxtRecords};
 
 /// A simple, synchronous DNS service discoverer.
-pub struct SimpleDiscoverer {
+pub struct ServiceDiscoverer {
     sock: UdpSocket,
     server: SocketAddr,
     domain: DomainName,
     discovery_timeout: Duration,
 }
 
-impl SimpleDiscoverer {
+impl ServiceDiscoverer {
     const DEFAULT_RETRANSMIT_TIMEOUT: Duration = Duration::from_millis(300);
     const DEFAULT_DISCOVERY_TIMEOUT: Duration = Duration::from_millis(1000);
 
@@ -183,7 +181,7 @@ impl SimpleDiscoverer {
     /// mostly intended for maintenance and debugging, since applications typically know the service
     /// types they support already.
     ///
-    /// To discover *service instances*, use [`SimpleDiscoverer::discover_instances`] instead.
+    /// To discover *service instances*, use [`ServiceDiscoverer::discover_instances`] instead.
     pub fn discover_service_types<C>(&mut self, mut callback: C) -> io::Result<()>
     where
         C: FnMut(&Service) -> ControlFlow<()>,

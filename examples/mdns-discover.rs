@@ -3,7 +3,7 @@
 use std::{io, ops::ControlFlow};
 
 use log::LevelFilter;
-use uwuhi::service::discovery::SimpleDiscoverer;
+use uwuhi::service::ServiceDiscoverer;
 
 fn main() -> io::Result<()> {
     env_logger::Builder::new()
@@ -12,7 +12,7 @@ fn main() -> io::Result<()> {
         .init();
 
     let mut service_types = Vec::new();
-    let mut browser = SimpleDiscoverer::new_multicast_v4()?;
+    let mut browser = ServiceDiscoverer::new_multicast_v4()?;
     browser.discover_service_types(|service| {
         service_types.push(service.clone());
         ControlFlow::Continue(())

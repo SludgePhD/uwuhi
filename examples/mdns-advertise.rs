@@ -1,9 +1,7 @@
 use std::{io, net::IpAddr};
 
 use log::LevelFilter;
-use uwuhi::service::{
-    advertising::ServiceAdvertiser, InstanceDetails, ServiceInstance, ServiceTransport,
-};
+use uwuhi::service::{InstanceDetails, ServiceAdvertiser, ServiceInstance, ServiceTransport};
 
 fn main() -> io::Result<()> {
     env_logger::Builder::new()

@@ -11,8 +11,11 @@ use crate::packet::{
     Error,
 };
 
-pub mod advertising;
-pub mod discovery;
+mod advertising;
+mod discovery;
+
+pub use advertising::ServiceAdvertiser;
+pub use discovery::ServiceDiscoverer;
 
 /// Transport protocol used by an advertised service (`_tcp` or `_udp`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -185,6 +188,7 @@ impl fmt::Debug for ServiceInstance {
     }
 }
 
+/// Describes how a [`ServiceInstance`] can be reached, and supplies service metadata.
 pub struct InstanceDetails {
     host: DomainName,
     port: u16,
@@ -208,11 +212,13 @@ impl InstanceDetails {
         }
     }
 
+    /// Returns the [`DomainName`] on which the service can be found.
     #[inline]
     pub fn host(&self) -> &DomainName {
         &self.host
     }
 
+    /// Returns the port on which the service is listening.
     #[inline]
     pub fn port(&self) -> u16 {
         self.port
