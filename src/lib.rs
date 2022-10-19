@@ -2,8 +2,6 @@
 
 #![forbid(unaligned_references)]
 
-use std::net::IpAddr;
-
 pub mod packet;
 pub mod resolver;
 pub mod service;
@@ -22,19 +20,3 @@ pub const DNS_BUFFER_SIZE: usize = 512;
 /// This constant is the size of packet receive buffers and does not have to accomodate IP and UDP
 /// headers. It still does, because I cannot be bothered.
 pub const MDNS_BUFFER_SIZE: usize = 1500;
-
-/// Iterator over IP addresses received from a name server.
-pub struct IpAddrIter<'a> {
-    inner: std::slice::Iter<'a, IpAddr>,
-}
-
-impl<'a> Iterator for IpAddrIter<'a> {
-    type Item = IpAddr;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.inner.next() {
-            Some(ip) => Some(*ip),
-            None => None,
-        }
-    }
-}

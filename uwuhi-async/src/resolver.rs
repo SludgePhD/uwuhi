@@ -1,69 +1,62 @@
 //! DNS name resolution.
 
 use std::{
-    io,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     time::Duration,
 };
 
-use crate::packet::{
-    decoder::MessageDecoder,
-    encoder::{MessageEncoder, Question},
-    name::DomainName,
-    records::Record,
-    Error, Header, QType,
-};
+pub use uwuhi::resolver::*;
+use uwuhi::{packet::name::DomainName, DNS_BUFFER_SIZE, MDNS_BUFFER_SIZE};
 
-use crate::{DNS_BUFFER_SIZE, MDNS_BUFFER_SIZE};
+use async_std::{io, net::UdpSocket};
 
-/// A simple, synchronous, non-recursive (m)DNS stub resolver.
-pub struct SyncResolver {
+pub struct AsyncResolver {
     servers: Vec<SocketAddr>,
     sock: UdpSocket,
     ip_buf: Vec<IpAddr>,
     is_multicast: bool,
+    timeout: Duration,
 }
 
-impl SyncResolver {
+impl AsyncResolver {
     const DEFAULT_TIMEOUT: Duration = Duration::from_millis(500);
 
     /// Creates a new DNS resolver that will contact the given server.
-    pub fn new(sock: SocketAddr) -> io::Result<Self> {
-        let bind_addr: SocketAddr = if sock.is_ipv6() {
+    pub async fn new(server: SocketAddr) -> io::Result<Self> {
+        let bind_addr: SocketAddr = if server.is_ipv6() {
             (Ipv6Addr::UNSPECIFIED, 0).into()
         } else {
             (Ipv4Addr::UNSPECIFIED, 0).into()
         };
-        let mut this = Self {
-            servers: vec![sock],
-            sock: UdpSocket::bind(bind_addr)?,
+        Ok(Self {
+            servers: vec![server],
+            sock: UdpSocket::bind(bind_addr).await?,
             ip_buf: Vec::new(),
             is_multicast: bind_addr.ip().is_multicast(),
-        };
-        this.set_timeout(Self::DEFAULT_TIMEOUT)?;
-        Ok(this)
+            timeout: Self::DEFAULT_TIMEOUT,
+        })
     }
 
     /// Creates a new mDNS resolver that will use IPv4.
-    pub fn new_multicast_v4() -> io::Result<Self> {
-        Self::new("224.0.0.251:5353".parse().unwrap())
+    pub async fn new_multicast_v4() -> io::Result<Self> {
+        Self::new("224.0.0.251:5353".parse().unwrap()).await
     }
 
     /// Creates a new mDNS resolver that will use IPv6.
-    pub fn new_multicast_v6() -> io::Result<Self> {
-        Self::new("[ff02::fb]:5353".parse().unwrap())
+    pub async fn new_multicast_v6() -> io::Result<Self> {
+        Self::new("[ff02::fb]:5353".parse().unwrap()).await
     }
 
     /// Adds another server to be contacted by this resolver.
     ///
-    /// Calling [`SyncResolver::resolve`] or [`SyncResolver::resolve_domain`] will send a query to
+    /// Calling [`AsyncResolver::resolve`] or [`AsyncResolver::resolve_domain`] will send a query to
     /// every server in this list. The first response containing at least one resolved IP address
     /// will be returned.
     ///
     /// # Panics
     ///
-    /// All servers added to the same [`SyncResolver`] must match the family of the first server
-    /// passed to [`SyncResolver::new`], otherwise this method will panic.
+    /// All servers added to the same [`AsyncResolver`] must match the family of the first server
+    /// passed to [`AsyncResolver::new`], otherwise this method will panic.
     ///
     /// This method will also panic when called on a multicast resolver.
     pub fn add_server(&mut self, server: SocketAddr) {
@@ -84,7 +77,7 @@ impl SyncResolver {
     /// This is the timeout for individual receive operations, not for the whole query. Packets that
     /// don't match the query that was sent will be ignored, but still reset the timeout.
     pub fn set_timeout(&mut self, timeout: Duration) -> io::Result<()> {
-        self.sock.set_read_timeout(Some(timeout))?;
+        self.timeout = timeout;
         Ok(())
     }
 
@@ -95,9 +88,12 @@ impl SyncResolver {
     ///
     /// The resolver does not perform recursive resolution (it is a "stub resolver"). It does set
     /// the `RD` bit in the query, which instructs the server to perform recursion.
-    pub fn resolve(&mut self, hostname: &str) -> io::Result<impl Iterator<Item = IpAddr> + '_> {
+    pub async fn resolve(
+        &mut self,
+        hostname: &str,
+    ) -> io::Result<impl Iterator<Item = IpAddr> + '_> {
         let name = DomainName::from_str(&hostname)?;
-        self.resolve_domain(&name)
+        self.resolve_domain(&name).await
     }
 
     /// Attempts to resolve a [`DomainName`] using the configured DNS servers.
@@ -107,7 +103,7 @@ impl SyncResolver {
     ///
     /// The resolver does not perform recursive resolution (it is a "stub resolver"). It does set
     /// the `RD` bit in the query, which instructs the server to perform recursion.
-    pub fn resolve_domain(
+    pub async fn resolve_domain(
         &mut self,
         name: &DomainName,
     ) -> io::Result<impl Iterator<Item = IpAddr> + '_> {
@@ -120,12 +116,12 @@ impl SyncResolver {
 
         // FIXME: retransmit
         for addr in &self.servers {
-            self.sock.send_to(data, addr)?;
+            self.sock.send_to(data, addr).await?;
         }
 
         loop {
             let mut recv_buf = [0; DNS_BUFFER_SIZE];
-            let (b, addr) = self.sock.recv_from(&mut recv_buf)?;
+            let (b, addr) = io::timeout(self.timeout, self.sock.recv_from(&mut recv_buf)).await?;
             let recv = &recv_buf[..b];
             log::trace!("recv from {}: {:x?}", addr, recv);
 
@@ -142,42 +138,4 @@ impl SyncResolver {
             }
         }
     }
-}
-
-/// Writes a DNS query asking for IPv4 and IPv6 addresses of `name` into `buf`.
-///
-/// The given buffer must be large enough to fit the query, or this method will panic.
-pub fn encode_query<'a>(buf: &'a mut [u8], name: &DomainName) -> &'a [u8] {
-    let mut header = Header::default();
-    header.set_recursion_desired(true);
-    header.set_id(12345);
-    let mut enc = MessageEncoder::new(buf);
-    enc.set_header(header);
-    enc.question(Question::new(&name).ty(QType::A));
-    enc.question(Question::new(&name).ty(QType::AAAA));
-    let bytes = enc.finish().unwrap();
-    &buf[..bytes]
-}
-
-/// Decodes an answer packet from a DNS resolver, adding any contained IP addresses to `ip_buf`.
-pub fn decode_answer(msg: &[u8], ip_buf: &mut Vec<IpAddr>) -> Result<(), Error> {
-    let dec = MessageDecoder::new(msg)?;
-    let h = dec.header();
-    log::trace!("header: {:?}", h);
-    if !h.is_response() {
-        return Ok(());
-    }
-
-    for res in dec.answers()?.iter() {
-        let ans = res?;
-        log::debug!("ANS: {}", ans);
-        match ans.as_enum() {
-            Some(Ok(Record::A(a))) => ip_buf.push(IpAddr::V4(a.addr().octets().into())),
-            Some(Ok(Record::AAAA(a))) => ip_buf.push(IpAddr::V6(a.addr().octets().into())),
-            Some(Err(e)) => return Err(e),
-            _ => {}
-        }
-    }
-
-    Ok(())
 }

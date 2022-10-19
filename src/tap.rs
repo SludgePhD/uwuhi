@@ -11,11 +11,11 @@ use socket2::{Domain, Protocol, Socket, Type};
 use crate::MDNS_BUFFER_SIZE;
 
 /// An mDNS tap that will log every received mDNS packet.
-pub struct Tap {
+pub struct SyncTap {
     sock: UdpSocket,
 }
 
-impl Tap {
+impl SyncTap {
     /// Creates a new mDNS tap listening on port 5353.
     pub fn new() -> io::Result<Self> {
         let sock = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;

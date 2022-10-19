@@ -1,6 +1,6 @@
 [package]
 name = "uwuhi"
-version = "0.2.0"
+version.workspace = true
 edition = "2021"
 description = "mDNS Service Discovery implementation"
 license = "0BSD"
@@ -16,3 +16,9 @@ smallvec = { version = "1.9.0", features = ["const_new"] }
 [dev-dependencies]
 env_logger = "0.9.0"
 if-addrs = "0.7.0"
+
+[workspace]
+members = [".", "uwuhi-async"]
+package.version = "0.3.0"
+dependencies.uwuhi = { version = "0.3.0", path = "." }
+# update these versions together ^

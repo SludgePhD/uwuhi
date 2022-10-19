@@ -11,11 +11,8 @@ use crate::packet::{
     Error,
 };
 
-mod advertising;
-mod discovery;
-
-pub use advertising::ServiceAdvertiser;
-pub use discovery::ServiceDiscoverer;
+pub mod advertising;
+pub mod discovery;
 
 /// Transport protocol used by an advertised service (`_tcp` or `_udp`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,7 +31,7 @@ impl ServiceTransport {
         }
     }
 
-    fn to_label(&self) -> Label {
+    pub fn to_label(&self) -> Label {
         Label::new(self.as_str())
     }
 }
@@ -63,7 +60,7 @@ impl Service {
         Self { name, transport }
     }
 
-    fn from_ptr(ptr: PTR<'_>) -> Result<Self, Error> {
+    pub fn from_ptr(ptr: PTR<'_>) -> Result<Self, Error> {
         let mut labels = ptr.ptrdname().labels().iter();
         let service_name = labels.next().ok_or(Error::Eof)?;
         let transport = labels.next().ok_or(Error::Eof)?;
@@ -133,7 +130,7 @@ impl ServiceInstance {
         }
     }
 
-    fn from_ptr(ptr: PTR<'_>) -> Result<Self, Error> {
+    pub fn from_ptr(ptr: PTR<'_>) -> Result<Self, Error> {
         let mut labels = ptr.ptrdname().labels().iter();
         let instance_name = labels.next().ok_or(Error::Eof)?;
         let service_name = labels.next().ok_or(Error::Eof)?;
@@ -196,20 +193,21 @@ pub struct InstanceDetails {
 }
 
 impl InstanceDetails {
-    fn from_srv(srv: &SRV<'_>) -> Result<Self, Error> {
-        Ok(Self {
-            host: srv.target().clone(),
-            port: srv.port(),
-            txt: TxtRecords::new(),
-        })
-    }
-
     pub fn new(host: DomainName, port: u16) -> Self {
         Self {
             host,
             port,
             txt: TxtRecords::new(),
         }
+    }
+
+    /// Parses an [`SRV`] record containing instance details.
+    pub fn from_srv(srv: &SRV<'_>) -> Result<Self, Error> {
+        Ok(Self {
+            host: srv.target().clone(),
+            port: srv.port(),
+            txt: TxtRecords::new(),
+        })
     }
 
     /// Returns the [`DomainName`] on which the service can be found.
@@ -250,7 +248,13 @@ struct TxtRecord {
 }
 
 impl TxtRecords {
-    fn from_txt(txt: &TXT<'_>) -> Self {
+    pub fn new() -> Self {
+        Self {
+            map: BTreeMap::new(),
+        }
+    }
+
+    pub fn from_txt(txt: &TXT<'_>) -> Self {
         let mut map = BTreeMap::new();
 
         for entry in txt.entries() {
@@ -283,12 +287,6 @@ impl TxtRecords {
         }
 
         Self { map }
-    }
-
-    pub fn new() -> Self {
-        Self {
-            map: BTreeMap::new(),
-        }
     }
 
     /// Adds a TXT record with no value.

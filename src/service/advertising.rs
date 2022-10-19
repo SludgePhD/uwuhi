@@ -1,13 +1,15 @@
+//! Service advertising.
+
 use std::{
     io,
-    net::{Ipv4Addr, SocketAddrV4, UdpSocket},
+    net::{IpAddr, Ipv4Addr, SocketAddrV4, UdpSocket},
 };
 
 use crate::packet::{
     decoder::MessageDecoder,
     encoder::{MessageEncoder, ResourceRecord},
     name::{DomainName, Label},
-    records::{Record, A, PTR, SRV, TXT},
+    records::{Record, A, AAAA, PTR, SRV, TXT},
     Class, Header, Opcode, RCode,
 };
 use socket2::{Domain, Protocol, Socket, Type};
@@ -16,33 +18,91 @@ use crate::MDNS_BUFFER_SIZE;
 
 use super::{InstanceDetails, ServiceInstance, TxtRecordValue};
 
-/// mDNS service advertiser and name server.
-pub struct ServiceAdvertiser {
+pub struct SyncAdvertiser {
+    adv: Advertiser,
+}
+
+impl SyncAdvertiser {
+    /// Creates a new service advertiser that uses the domain `hostname.local`.
+    ///
+    /// `hostname` should be different from the system host name, to avoid conflicts with other
+    /// installed mDNS responders.
+    pub fn new(hostname: Label, addr: IpAddr) -> io::Result<Self> {
+        Ok(Self {
+            adv: Advertiser::new(hostname, addr)?,
+        })
+    }
+
+    pub fn add_name(&mut self, hostname: Label, addr: IpAddr) {
+        self.adv.add_name(hostname, addr);
+    }
+
+    pub fn add_instance(&mut self, instance: ServiceInstance, details: InstanceDetails) {
+        self.adv.add_instance(instance, details);
+    }
+
+    /// Starts listening for and responding to queries.
+    ///
+    /// This method will block forever and never return, except when an error occurs.
+    pub fn listen_blocking(&mut self) -> io::Result<()> {
+        let sock = self.adv.create_socket()?;
+        let mut recv_buf = [0; MDNS_BUFFER_SIZE];
+        loop {
+            let (len, addr) = sock.recv_from(&mut recv_buf)?;
+            let packet = &recv_buf[..len];
+
+            log::trace!("raw recv from {}: {:x?}", addr, packet);
+
+            match self.adv.handle_packet(packet) {
+                Ok(Some(resp)) => {
+                    sock.send_to(resp, addr)?;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    log::debug!("failed to handle packet: {}", e);
+                }
+            }
+        }
+    }
+}
+
+/// I/O-less advertising logic.
+///
+/// You probably want to use [`SyncAdvertiser`] instead.
+pub struct Advertiser {
     discovery_domain: DomainName,
     db: RecordDb,
     response_buf: Vec<u8>,
 }
 
-impl ServiceAdvertiser {
+impl Advertiser {
     /// Creates a new service advertiser that uses the domain `hostname.local`.
     ///
     /// `hostname` should be different from the system host name, to avoid conflicts with other
     /// installed mDNS responders.
-    pub fn new(hostname: Label, addr: Ipv4Addr) -> io::Result<Self> {
+    pub fn new(hostname: Label, addr: IpAddr) -> io::Result<Self> {
+        let mut this = Self {
+            discovery_domain: DomainName::from_str("_services._dns-sd._udp.local.").unwrap(),
+            db: RecordDb::new(),
+            response_buf: vec![0; MDNS_BUFFER_SIZE],
+        };
+        this.add_name(hostname, addr);
+        Ok(this)
+    }
+
+    /// Adds an additional hostname and IP address to resolve.
+    pub fn add_name(&mut self, hostname: Label, addr: IpAddr) {
         let mut host_and_domain = DomainName::from_iter([hostname]);
         host_and_domain.push_label(Label::new("local"));
 
         log::info!("{} <-> {}", addr, host_and_domain);
 
-        let mut db = RecordDb::new();
-        db.entries
-            .push(Entry::new(host_and_domain, Record::A(A::new(addr))));
+        let record = match addr {
+            IpAddr::V4(addr) => Record::A(A::new(addr)),
+            IpAddr::V6(addr) => Record::AAAA(AAAA::new(addr)),
+        };
 
-        Ok(Self {
-            discovery_domain: DomainName::from_str("_services._dns-sd._udp.local.").unwrap(),
-            db,
-            response_buf: vec![0; MDNS_BUFFER_SIZE],
-        })
+        self.db.entries.push(Entry::new(host_and_domain, record));
     }
 
     pub fn add_instance(&mut self, instance: ServiceInstance, details: InstanceDetails) {
@@ -115,34 +175,10 @@ impl ServiceAdvertiser {
         Ok(sock)
     }
 
-    /// Starts listening for and responding to queries.
-    ///
-    /// This method will block forever and never return, except when an error occurs.
-    pub fn listen_blocking(&mut self) -> io::Result<()> {
-        let sock = self.create_socket()?;
-        let mut recv_buf = [0; MDNS_BUFFER_SIZE];
-        loop {
-            let (len, addr) = sock.recv_from(&mut recv_buf)?;
-            let packet = &recv_buf[..len];
-
-            log::trace!("raw recv from {}: {:x?}", addr, packet);
-
-            match self.handle_packet(packet) {
-                Ok(Some(resp)) => {
-                    sock.send_to(resp, addr)?;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    log::debug!("failed to handle packet: {}", e);
-                }
-            }
-        }
-    }
-
     /// Handles an incoming mDNS packet, and returns a response for it (if any).
     ///
     /// This method does not perform I/O by itself, so it can be used in a *sans-io* fashion to
-    /// build an async mDNS advertiser. If that's not needed, [`ServiceAdvertiser::listen_blocking`]
+    /// build an async mDNS advertiser. If that's not needed, [`SyncAdvertiser::listen_blocking`]
     /// can be called instead.
     pub fn handle_packet(&mut self, packet: &[u8]) -> io::Result<Option<&[u8]>> {
         let mut dec = MessageDecoder::new(packet)?;

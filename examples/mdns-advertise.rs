@@ -1,7 +1,9 @@
 use std::{io, net::IpAddr};
 
 use log::LevelFilter;
-use uwuhi::service::{InstanceDetails, ServiceAdvertiser, ServiceInstance, ServiceTransport};
+use uwuhi::packet::name::Label;
+use uwuhi::service::advertising::SyncAdvertiser;
+use uwuhi::service::{InstanceDetails, ServiceInstance, ServiceTransport};
 
 fn main() -> io::Result<()> {
     env_logger::Builder::new()
@@ -18,21 +20,21 @@ fn main() -> io::Result<()> {
         })
         .collect::<Vec<_>>();
 
-    let addr = match &*local_addrs {
-        [ip] => *ip,
+    let (&first_addr, more_addrs) = match &*local_addrs {
+        [first, rest @ ..] => (first, rest),
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::AddrNotAvailable,
-                format!(
-                    "need exactly one local address, found {}: {:?}",
-                    local_addrs.len(),
-                    local_addrs
-                ),
+                "no local network interface with private IPv4 address found",
             ))
         }
     };
 
-    let mut advertiser = ServiceAdvertiser::new("my_hostname".parse().unwrap(), addr)?;
+    let hostname: Label = "my_hostname".parse().unwrap();
+    let mut advertiser = SyncAdvertiser::new(hostname.clone(), first_addr.into())?;
+    for &addr in more_addrs {
+        advertiser.add_name(hostname.clone(), addr.into());
+    }
     advertiser.add_instance(
         ServiceInstance::new(
             "My Service Instance".parse().unwrap(),
