@@ -26,7 +26,7 @@ fn main() -> io::Result<()> {
             return Err(io::Error::new(
                 io::ErrorKind::AddrNotAvailable,
                 "no local network interface with private IPv4 address found",
-            ))
+            ));
         }
     };
 
