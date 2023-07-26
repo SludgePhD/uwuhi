@@ -1,7 +1,5 @@
 //! (m)DNS packet decoder and encoder.
 
-#![forbid(unaligned_references)]
-
 #[macro_use]
 mod macros;
 pub mod decoder;
@@ -322,7 +320,7 @@ const fn be_pos(pos: u16) -> u16 {
 }
 
 bitflags! {
-    #[derive(AsBytes, FromBytes)]
+    #[derive(Debug)]
     #[repr(transparent)]
     struct HeaderFlags: u16 {
         /// If set, the message is a response to a query. If unset, it is a query.
@@ -375,15 +373,13 @@ pub struct Header {
 
 impl Header {
     fn flags(&self) -> HeaderFlags {
-        HeaderFlags {
-            bits: self.flags.get(),
-        }
+        HeaderFlags::from_bits_retain(self.flags.get())
     }
 
     fn modify_flags(&mut self, with: impl FnOnce(&mut HeaderFlags)) {
         let mut flags = self.flags();
         with(&mut flags);
-        self.flags.set(flags.bits);
+        self.flags.set(flags.bits());
     }
 
     /// Returns the 16-bit packet ID.
@@ -455,7 +451,8 @@ impl Header {
     pub fn set_opcode(&mut self, opcode: Opcode) {
         self.modify_flags(|f| {
             f.remove(HeaderFlags::OPCODE);
-            f.bits |= (u16::from(opcode.0) << HeaderFlags::OPCODE_POS) & HeaderFlags::OPCODE_MASK;
+            *f.0.bits_mut() |=
+                (u16::from(opcode.0) << HeaderFlags::OPCODE_POS) & HeaderFlags::OPCODE_MASK;
         });
     }
 
@@ -466,7 +463,8 @@ impl Header {
     pub fn set_rcode(&mut self, rcode: RCode) {
         self.modify_flags(|f| {
             f.remove(HeaderFlags::RCODE);
-            f.bits |= (u16::from(rcode.0) << HeaderFlags::RCODE_POS) & HeaderFlags::RCODE_MASK;
+            *f.0.bits_mut() |=
+                (u16::from(rcode.0) << HeaderFlags::RCODE_POS) & HeaderFlags::RCODE_MASK;
         });
     }
 

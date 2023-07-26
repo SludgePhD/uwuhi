@@ -1,1 +1,3 @@
-- replace `zerocopy` with `bytemuck` (the latter is at 1.0, zerocopy is not, and this is a public dependency)
+- figure out how to eagerly announce a service even when no query is received
+- figure out which retransmit/re-announce intervals to use
+- migrate to bytemuck

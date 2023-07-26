@@ -1,7 +1,5 @@
 //! Unicast and Multicast DNS and DNS Service Discovery implementation.
 
-#![forbid(unaligned_references)]
-
 pub mod packet;
 pub mod resolver;
 pub mod service;
