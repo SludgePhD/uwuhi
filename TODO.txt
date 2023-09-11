@@ -1,0 +1,1 @@
+- replace `zerocopy` with `bytemuck` (the latter is at 1.0, zerocopy is not, and this is a public dependency)
