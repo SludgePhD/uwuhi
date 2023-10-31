@@ -11,10 +11,7 @@ use std::{
 use async_std::{future, net::UdpSocket};
 use uwuhi::{
     packet::{name::DomainName, records::Record, QType},
-    service::{
-        discovery::{decode_answer, encode_query},
-        InstanceDetails, Service, ServiceInstance, TxtRecords,
-    },
+    service::{InstanceDetails, Service, ServiceInstance, TxtRecords},
     MDNS_BUFFER_SIZE,
 };
 
