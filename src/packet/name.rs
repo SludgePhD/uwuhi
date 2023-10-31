@@ -5,9 +5,8 @@ use std::{
     hash::{Hash, Hasher},
     mem, slice,
     str::FromStr,
+    vec,
 };
-
-use smallvec::SmallVec;
 
 use super::Error;
 
@@ -154,14 +153,12 @@ impl FromStr for Label {
 #[derive(PartialEq, Eq, Clone)]
 pub struct DomainName {
     // Does not include the trailing empty label.
-    labels: SmallVec<[Label; 3]>,
+    labels: Vec<Label>,
 }
 
 impl DomainName {
     /// The empty root domain `.`.
-    pub const ROOT: Self = Self {
-        labels: SmallVec::new_const(),
-    };
+    pub const ROOT: Self = Self { labels: Vec::new() };
 
     /// Parses a domain name as a string of `.`-separated labels.
     ///
@@ -203,7 +200,7 @@ impl<'a> Extend<&'a Label> for DomainName {
 impl FromIterator<Label> for DomainName {
     fn from_iter<T: IntoIterator<Item = Label>>(iter: T) -> Self {
         Self {
-            labels: SmallVec::from_iter(iter),
+            labels: Vec::from_iter(iter),
         }
     }
 }
@@ -211,7 +208,7 @@ impl FromIterator<Label> for DomainName {
 impl<'a> FromIterator<&'a Label> for DomainName {
     fn from_iter<T: IntoIterator<Item = &'a Label>>(iter: T) -> Self {
         Self {
-            labels: SmallVec::from_iter(iter.into_iter().cloned()),
+            labels: Vec::from_iter(iter.into_iter().cloned()),
         }
     }
 }
@@ -274,9 +271,7 @@ impl FromStr for DomainName {
             return Ok(Self::ROOT);
         }
 
-        let mut name = DomainName {
-            labels: SmallVec::new(),
-        };
+        let mut name = DomainName { labels: Vec::new() };
         for label in s.split_terminator('.') {
             name.labels.push(label.parse()?);
         }
@@ -286,7 +281,7 @@ impl FromStr for DomainName {
 
 /// A by-value iterator over the [`Label`]s of a [`DomainName`].
 pub struct IntoIter {
-    inner: smallvec::IntoIter<[Label; 3]>,
+    inner: vec::IntoIter<Label>,
 }
 
 impl Iterator for IntoIter {

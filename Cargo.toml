@@ -8,10 +8,9 @@ repository = "https://github.com/SludgePhD/uwuhi"
 
 [dependencies]
 bitflags = "2.3.3"
-zerocopy = "0.6.1"
+zerocopy = "0.6.1" ### TODO: switch to bytemuck, it is more stable and not a god damn google product
 socket2 = "0.5.3"
 log = "0.4.16"
-smallvec = { version = "1.9.0", features = ["const_new"] }
 
 [dev-dependencies]
 env_logger = "0.10.0"

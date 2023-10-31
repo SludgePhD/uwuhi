@@ -334,7 +334,6 @@ impl<'a> fmt::Display for PTR<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TXT<'a> {
-    // FIXME: not using `SmallVec` here because it is invariant over its element type
     entries: Vec<Cow<'a, [u8]>>,
 }
 
