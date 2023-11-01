@@ -4,7 +4,7 @@ use std::{io, net::IpAddr};
 
 use async_std::net::UdpSocket;
 use uwuhi::{
-    packet::name::Label,
+    name::Label,
     service::{InstanceDetails, ServiceInstance},
     MDNS_BUFFER_SIZE,
 };

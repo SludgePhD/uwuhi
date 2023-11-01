@@ -6,7 +6,7 @@ use std::{
 };
 
 pub use uwuhi::resolver::*;
-use uwuhi::{packet::name::DomainName, DNS_BUFFER_SIZE, MDNS_BUFFER_SIZE};
+use uwuhi::{name::DomainName, DNS_BUFFER_SIZE, MDNS_BUFFER_SIZE};
 
 use async_std::{io, net::UdpSocket};
 

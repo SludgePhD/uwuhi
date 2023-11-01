@@ -13,12 +13,11 @@ use std::{
     net::{Ipv4Addr, Ipv6Addr},
 };
 
-use crate::Error;
+use crate::{name::DomainName, Error};
 
 use super::{
     decoder::{self, Reader},
     encoder::Writer,
-    name::DomainName,
     Type,
 };
 

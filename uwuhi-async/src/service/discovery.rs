@@ -10,7 +10,8 @@ use std::{
 
 use async_std::{future, net::UdpSocket};
 use uwuhi::{
-    packet::{name::DomainName, records::Record, QType},
+    name::DomainName,
+    packet::{records::Record, QType},
     service::{InstanceDetails, Service, ServiceInstance, TxtRecords},
     MDNS_BUFFER_SIZE,
 };

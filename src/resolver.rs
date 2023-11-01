@@ -7,10 +7,10 @@ use std::{
 };
 
 use crate::{
+    name::DomainName,
     packet::{
         decoder::MessageDecoder,
         encoder::{MessageEncoder, Question},
-        name::DomainName,
         records::Record,
         Header, QType,
     },

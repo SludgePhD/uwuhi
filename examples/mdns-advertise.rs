@@ -1,7 +1,7 @@
 use std::{io, net::IpAddr};
 
 use log::LevelFilter;
-use uwuhi::packet::name::Label;
+use uwuhi::name::Label;
 use uwuhi::service::advertising::SyncAdvertiser;
 use uwuhi::service::{InstanceDetails, ServiceInstance, ServiceTransport};
 

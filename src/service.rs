@@ -6,10 +6,8 @@ use std::{
 };
 
 use crate::{
-    packet::{
-        name::{DomainName, Label},
-        records::{PTR, SRV, TXT},
-    },
+    name::{DomainName, Label},
+    packet::records::{PTR, SRV, TXT},
     Error,
 };
 

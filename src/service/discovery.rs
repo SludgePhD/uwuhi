@@ -9,10 +9,10 @@ use std::{
 };
 
 use crate::{
+    name::DomainName,
     packet::{
         decoder::MessageDecoder,
         encoder::{self, MessageEncoder},
-        name::DomainName,
         records::Record,
         Header, QType,
     },

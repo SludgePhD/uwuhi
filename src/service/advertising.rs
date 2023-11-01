@@ -5,12 +5,14 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddrV4, UdpSocket},
 };
 
-use crate::packet::{
-    decoder::MessageDecoder,
-    encoder::{MessageEncoder, ResourceRecord},
+use crate::{
     name::{DomainName, Label},
-    records::{Record, A, AAAA, PTR, SRV, TXT},
-    Class, Header, Opcode, RCode,
+    packet::{
+        decoder::MessageDecoder,
+        encoder::{MessageEncoder, ResourceRecord},
+        records::{Record, A, AAAA, PTR, SRV, TXT},
+        Class, Header, Opcode, RCode,
+    },
 };
 use socket2::{Domain, Protocol, Socket, Type};
 

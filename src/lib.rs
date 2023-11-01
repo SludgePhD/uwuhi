@@ -1,6 +1,7 @@
 //! Unicast and Multicast DNS and DNS Service Discovery implementation.
 
 mod error;
+pub mod name;
 mod num;
 pub mod packet;
 pub mod resolver;

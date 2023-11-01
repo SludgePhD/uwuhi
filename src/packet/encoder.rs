@@ -5,10 +5,9 @@ use std::mem::{align_of, size_of};
 
 use bytemuck::{NoUninit, Zeroable};
 
-use crate::Error;
+use crate::{name::DomainName, Error};
 
 use super::{
-    name::DomainName,
     records::{Record, ResourceRecordEncoder},
     section::{self, Section},
     Class, Header, QClass, QType,
