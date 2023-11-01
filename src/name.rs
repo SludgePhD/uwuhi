@@ -1,6 +1,7 @@
 //! Domain names and labels.
 
 use std::{
+    borrow::Cow,
     fmt::{self, Write},
     slice,
     str::FromStr,
@@ -122,6 +123,18 @@ impl DomainName {
     #[inline]
     pub fn push_label(&mut self, label: Label) {
         self.labels.push(label);
+    }
+}
+
+impl From<DomainName> for Cow<'_, DomainName> {
+    fn from(value: DomainName) -> Self {
+        Cow::Owned(value)
+    }
+}
+
+impl<'a> From<&'a DomainName> for Cow<'a, DomainName> {
+    fn from(value: &'a DomainName) -> Self {
+        Cow::Borrowed(value)
     }
 }
 

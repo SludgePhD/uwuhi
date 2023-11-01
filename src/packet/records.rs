@@ -6,6 +6,8 @@
 //! [`encoder::ResourceRecord`]: super::encoder::ResourceRecord
 //! [`decoder::ResourceRecord`]: super::decoder::ResourceRecord
 
+// TODO: move this module to the crate root
+
 use std::{
     borrow::Cow,
     fmt::{self, Write},
@@ -210,7 +212,7 @@ impl<'a> fmt::Display for AAAA<'a> {
 /// record. The canonical name should be used instead.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CNAME<'a> {
-    name: DomainName,
+    name: Cow<'a, DomainName>,
     _p: PhantomData<&'a ()>,
 }
 
@@ -223,7 +225,7 @@ impl<'a> RecordData<'a> for CNAME<'a> {
 
     fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
-            name: dec.r.read_domain_name()?,
+            name: dec.r.read_domain_name()?.into(),
             _p: PhantomData,
         })
     }
@@ -231,9 +233,9 @@ impl<'a> RecordData<'a> for CNAME<'a> {
 
 impl<'a> CNAME<'a> {
     /// Creates a new [`CNAME`] record from the *Canonical Name*.
-    pub fn new(name: DomainName) -> Self {
+    pub fn new(name: impl Into<Cow<'a, DomainName>>) -> Self {
         Self {
-            name,
+            name: name.into(),
             _p: PhantomData,
         }
     }
@@ -257,7 +259,7 @@ impl<'a> fmt::Display for CNAME<'a> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MX<'a> {
     preference: u16,
-    exchange: DomainName,
+    exchange: Cow<'a, DomainName>,
     _p: PhantomData<&'a ()>,
 }
 
@@ -272,7 +274,7 @@ impl<'a> RecordData<'a> for MX<'a> {
     fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             preference: dec.r.read_u16()?,
-            exchange: dec.r.read_domain_name()?,
+            exchange: dec.r.read_domain_name()?.into(),
             _p: PhantomData,
         })
     }
@@ -281,10 +283,10 @@ impl<'a> RecordData<'a> for MX<'a> {
 impl<'a> MX<'a> {
     /// Creates a new [`MX`] record from its preference number and the mail server's [`DomainName`].
     #[inline]
-    pub fn new(preference: u16, exchange: DomainName) -> Self {
+    pub fn new(preference: u16, exchange: impl Into<Cow<'a, DomainName>>) -> Self {
         Self {
             preference,
-            exchange,
+            exchange: exchange.into(),
             _p: PhantomData,
         }
     }
@@ -320,7 +322,7 @@ impl<'a> fmt::Display for MX<'a> {
 /// Several [`NS`] records can be used by the same domain name to increase redundancy.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NS<'a> {
-    nsdname: DomainName,
+    nsdname: Cow<'a, DomainName>,
     _p: PhantomData<&'a ()>,
 }
 
@@ -333,7 +335,7 @@ impl<'a> RecordData<'a> for NS<'a> {
 
     fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
-            nsdname: dec.r.read_domain_name()?,
+            nsdname: dec.r.read_domain_name()?.into(),
             _p: PhantomData,
         })
     }
@@ -341,9 +343,9 @@ impl<'a> RecordData<'a> for NS<'a> {
 
 impl<'a> NS<'a> {
     /// Creates an [`NS`] record from the [`DomainName`] of the authoritative name server.
-    pub fn new(nsdname: DomainName) -> Self {
+    pub fn new(nsdname: impl Into<Cow<'a, DomainName>>) -> Self {
         Self {
-            nsdname,
+            nsdname: nsdname.into(),
             _p: PhantomData,
         }
     }
@@ -362,11 +364,11 @@ impl<'a> fmt::Display for NS<'a> {
 
 /// A record storing the [`DomainName`] associated with an IP address.
 ///
-/// This record type is used by *reverse DNS*, so [`PTR`] records are not associated with the
-/// human-readable domain name, but with the `in-addr.arpa` namespace.
+/// This record type is used by *reverse DNS*, in which [`PTR`] records are not associated with the
+/// human-readable domain name, but with the `in-addr.arpa` namespace. It is also used for DNS-SD.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PTR<'a> {
-    ptrdname: DomainName,
+    ptrdname: Cow<'a, DomainName>,
     _p: PhantomData<&'a ()>,
 }
 
@@ -379,7 +381,7 @@ impl<'a> RecordData<'a> for PTR<'a> {
 
     fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
-            ptrdname: dec.r.read_domain_name()?,
+            ptrdname: dec.r.read_domain_name()?.into(),
             _p: PhantomData,
         })
     }
@@ -387,9 +389,9 @@ impl<'a> RecordData<'a> for PTR<'a> {
 
 impl<'a> PTR<'a> {
     /// Creates a [`PTR`] record from the [`DomainName`] of an IP address.
-    pub fn new(ptrdname: DomainName) -> Self {
+    pub fn new(ptrdname: impl Into<Cow<'a, DomainName>>) -> Self {
         Self {
-            ptrdname,
+            ptrdname: ptrdname.into(),
             _p: PhantomData,
         }
     }
@@ -487,12 +489,18 @@ impl<'a> fmt::Display for TXT<'a> {
     }
 }
 
+/// A service record that defines the host and port number of a network service.
+///
+/// An [`SRV`] record is associated with a domain name of the form `_service._proto.name.`, where
+/// `service` is an identifier of the service offered, `_proto` is either `_tcp` for services served
+/// over TCP or `_udp` for all other services, and `name` is the domain name advertising the
+/// service (which may be different from the domain name *hosting* the service).
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SRV<'a> {
     priority: u16,
     weight: u16,
     port: u16,
-    target: DomainName,
+    target: Cow<'a, DomainName>,
     _p: PhantomData<&'a ()>,
 }
 
@@ -511,19 +519,24 @@ impl<'a> RecordData<'a> for SRV<'a> {
             priority: dec.r.read_u16()?,
             weight: dec.r.read_u16()?,
             port: dec.r.read_u16()?,
-            target: dec.r.read_domain_name()?,
+            target: dec.r.read_domain_name()?.into(),
             _p: PhantomData,
         })
     }
 }
 
 impl<'a> SRV<'a> {
-    pub fn new(priority: u16, weight: u16, port: u16, target: DomainName) -> Self {
+    pub fn new(
+        priority: u16,
+        weight: u16,
+        port: u16,
+        target: impl Into<Cow<'a, DomainName>>,
+    ) -> Self {
         Self {
             priority,
             weight,
             port,
-            target,
+            target: target.into(),
             _p: PhantomData,
         }
     }
@@ -535,16 +548,22 @@ impl<'a> SRV<'a> {
         self.priority
     }
 
+    /// Returns the weight value of this service.
+    ///
+    /// For [`SRV`] records with the same [`SRV::priority()`] value, the relative weights determine
+    /// the probability for the service getting picked by clients.
     #[inline]
     pub fn weight(&self) -> u16 {
         self.weight
     }
 
+    /// Returns the port on which the service is hosted.
     #[inline]
     pub fn port(&self) -> u16 {
         self.port
     }
 
+    /// Returns the [`DomainName`] where the service is hosted.
     #[inline]
     pub fn target(&self) -> &DomainName {
         &self.target
@@ -561,10 +580,11 @@ impl<'a> fmt::Display for SRV<'a> {
     }
 }
 
+/// Record containing administrative information about a DNS zone.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SOA<'a> {
-    mname: DomainName,
-    rname: DomainName,
+    mname: Cow<'a, DomainName>,
+    rname: Cow<'a, DomainName>,
     serial: u32,
     refresh: u32,
     retry: u32,
@@ -588,8 +608,8 @@ impl<'a> RecordData<'a> for SOA<'a> {
 
     fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
-            mname: dec.r.read_domain_name()?,
-            rname: dec.r.read_domain_name()?,
+            mname: dec.r.read_domain_name()?.into(),
+            rname: dec.r.read_domain_name()?.into(),
             serial: dec.r.read_u32()?,
             refresh: dec.r.read_u32()?,
             retry: dec.r.read_u32()?,
@@ -601,9 +621,10 @@ impl<'a> RecordData<'a> for SOA<'a> {
 }
 
 impl<'a> SOA<'a> {
+    /// Creates a new [`SOA`] record from all of its fields.
     pub fn new(
-        mname: DomainName,
-        rname: DomainName,
+        mname: impl Into<Cow<'a, DomainName>>,
+        rname: impl Into<Cow<'a, DomainName>>,
         serial: u32,
         refresh: u32,
         retry: u32,
@@ -611,8 +632,8 @@ impl<'a> SOA<'a> {
         minimum_ttl: u32,
     ) -> Self {
         Self {
-            mname,
-            rname,
+            mname: mname.into(),
+            rname: rname.into(),
             serial,
             refresh,
             retry,
@@ -622,36 +643,57 @@ impl<'a> SOA<'a> {
         }
     }
 
+    /// Returns the primary master name server for the zone.
     #[inline]
     pub fn mname(&self) -> &DomainName {
         &self.mname
     }
 
+    /// Returns the email address of the administrator responsible for this DNS zone.
+    ///
+    /// The email address is encoded as a [`DomainName`] where the first [`Label`] is the part
+    /// before the `@` sign.
+    ///
+    /// [`Label`]: crate::name::Label
     #[inline]
     pub fn rname(&self) -> &DomainName {
         &self.rname
     }
 
+    /// Returns the serial number of this zone.
+    ///
+    /// This is increased to signal a zone update to secondary name servers.
     #[inline]
     pub fn serial(&self) -> u32 {
         self.serial
     }
 
+    /// Returns the time in seconds after which the [`SOA`] record should be re-queried from the
+    /// primary name server.
     #[inline]
     pub fn refresh(&self) -> u32 {
         self.refresh
     }
 
+    /// Returns the number of seconds after which the [`SOA`] record should be re-queried if the
+    /// primary name server does not respond.
     #[inline]
     pub fn retry(&self) -> u32 {
         self.retry
     }
 
+    /// Returns the number of seconds after which a secondary DNS server should stop answering
+    /// requests for this zone if the primary server does not respond.
     #[inline]
     pub fn expire(&self) -> u32 {
         self.expire
     }
 
+    /// Returns the `MINIMUM` field of the [`SOA`] record.
+    ///
+    /// The meaning of the result is defined by [RFC 2308].
+    ///
+    /// [RFC 2308]: https://datatracker.ietf.org/doc/html/rfc2308
     #[inline]
     pub fn minimum_ttl(&self) -> u32 {
         self.minimum_ttl
@@ -703,17 +745,17 @@ mod tests {
     fn test_roundtrip() {
         roundtrip(A::new(Ipv4Addr::new(9, 4, 78, 210)), &mut BUF);
         roundtrip(AAAA::new(Ipv6Addr::LOCALHOST), &mut BUF);
-        roundtrip(CNAME::new(domain("a.b.c")), &mut BUF);
-        roundtrip(MX::new(123, domain("a.b.c")), &mut BUF);
-        roundtrip(NS::new(domain("a.b.c")), &mut BUF);
-        roundtrip(PTR::new(domain("a.b.c")), &mut BUF);
+        roundtrip(CNAME::new(&domain("a.b.c")), &mut BUF);
+        roundtrip(MX::new(123, &domain("a.b.c")), &mut BUF);
+        roundtrip(NS::new(&domain("a.b.c")), &mut BUF);
+        roundtrip(PTR::new(&domain("a.b.c")), &mut BUF);
         roundtrip(TXT::new([&b"abc"[..]]), &mut BUF);
         roundtrip(TXT::new([&b"abc"[..], &[], &b"def"[..]]), &mut BUF);
-        roundtrip(SRV::new(123, 456, 8080, domain("a.b.c")), &mut BUF);
+        roundtrip(SRV::new(123, 456, 8080, &domain("a.b.c")), &mut BUF);
         roundtrip(
             SOA::new(
-                domain("m.name"),
-                domain("r.name"),
+                &domain("m.name"),
+                &domain("r.name"),
                 999999,
                 888888,
                 777777,
