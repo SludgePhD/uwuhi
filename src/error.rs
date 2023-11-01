@@ -16,7 +16,7 @@ pub enum Error {
     /// Only returned from [`MessageEncoder::finish`], indicates that there was not enough space in
     /// the provided buffer to fit the entire message.
     ///
-    /// [`MessageEncoder::finish`]: super::encoder::MessageEncoder::finish
+    /// [`MessageEncoder::finish`]: crate::packet::encoder::MessageEncoder::finish
     Truncated,
     /// An empty label was encountered where it is not allowed.
     InvalidEmptyLabel,
