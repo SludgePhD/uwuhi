@@ -5,7 +5,7 @@ use std::{
     net::{Ipv4Addr, SocketAddr, UdpSocket},
 };
 
-use crate::{packet::decoder::MessageDecoder, Error};
+use crate::{hex::Hex, packet::decoder::MessageDecoder, Error};
 use socket2::{Domain, Protocol, Socket, Type};
 
 use crate::MDNS_BUFFER_SIZE;
@@ -48,52 +48,9 @@ impl SyncTap {
     }
 
     fn process(&self, addr: SocketAddr, msg: &[u8]) -> Result<(), Error> {
-        log::trace!(
-            "raw packet from {}: {} bytes {}",
-            addr,
-            msg.len(),
-            msg.escape_ascii()
-        );
+        log::trace!("raw packet from {}: {} bytes {}", addr, msg.len(), Hex(msg));
 
-        let mut msg = MessageDecoder::new(msg)?;
-        let h = msg.header();
-        log::trace!("header={:?}", h);
-        let dir = if h.is_query() { "query" } else { "response" };
-        let trunc = if h.is_truncated() { ", trunc" } else { "" };
-        let ra = if h.is_recursion_available() {
-            ", RA"
-        } else {
-            ""
-        };
-        let rd = if h.is_recursion_desired() { ", RD" } else { "" };
-        let aa = if h.is_authority() { ", AA" } else { "" };
-        log::info!(
-            "{} from {} (id={}, op={}, rcode={}{trunc}{ra}{rd}{aa})",
-            dir,
-            addr,
-            h.id(),
-            h.opcode(),
-            h.rcode(),
-        );
-        for q in msg.iter() {
-            let q = q?;
-            log::debug!("Q: {}", q);
-        }
-        let mut msg = msg.answers()?;
-        for rr in msg.iter() {
-            let rr = rr?;
-            log::debug!("ANS: {}", rr);
-        }
-        let mut msg = msg.authority()?;
-        for rr in msg.iter() {
-            let rr = rr?;
-            log::debug!("AUTH: {}", rr);
-        }
-        let mut msg = msg.additional()?;
-        for rr in msg.iter() {
-            let rr = rr?;
-            log::debug!("ADDL: {}", rr);
-        }
-        Ok(())
+        let msg = MessageDecoder::new(msg)?;
+        msg.format(|args| log::debug!("{}", args))
     }
 }

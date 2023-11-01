@@ -15,6 +15,10 @@ use crate::num::U16;
 
 ffi_enum! {
     /// DNS message operation codes.
+    ///
+    /// The [`Opcode`] tells the server what the client wants it to do. The vast majority of
+    /// messages use [`Opcode::QUERY`] to indicate that the message is either a DNS query or a
+    /// response to a query.
     pub enum Opcode: u8 {
         /// Query (or response to a query).
         ///
@@ -52,7 +56,7 @@ ffi_enum! {
     /// Server response codes.
     ///
     /// Note that only rcodes with a value of 15 or less can be represented in the packet's
-    /// [`Header`].
+    /// [`Header`]. Some [`RCode`]s with higher values are defined for external uses.
     pub enum RCode: u8 {
         /// No error.
         NO_ERROR = 0,
@@ -254,6 +258,9 @@ impl fmt::Display for QType {
 
 ffi_enum! {
     /// Resource Record classes.
+    ///
+    /// "Classes" are similar to namespaces. Today, largely only [`Class::IN`] is relevant, as it
+    /// is the class used for all Internet technology.
     pub enum Class: u16 {
         /// The Internet.
         IN = 1,
@@ -292,6 +299,13 @@ ffi_enum! {
 }
 
 impl QClass {
+    /// Returns whether the given [`Class`] matches the queried class `self`.
+    ///
+    /// If a record's [`Class`] matches the [`QClass`] in the query, it should be returned by the
+    /// server in the response.
+    ///
+    /// [`QClass::ANY`] matches any [`Class`]. Other [`QClass`]es only match their specific
+    /// [`Class`].
     pub fn matches(&self, class: Class) -> bool {
         if *self == Self::ANY {
             true
@@ -329,7 +343,7 @@ bitflags! {
         /// perform a recursive query. The bit is copied to the response.
         const RD = 1 << be_pos(7);
         /// Recursion Available: This bit can be set in a response to indicate that the responding
-        /// server support recursion.
+        /// server supports recursion.
         const RA = 1 << be_pos(8);
         const Z = 0b111 << be_pos(9);
         const RCODE = Self::RCODE_MASK;
@@ -442,6 +456,7 @@ impl Header {
     }
 
     pub fn set_opcode(&mut self, opcode: Opcode) {
+        // FIXME: this silently truncates [`Opcode`]s above 15
         self.modify_flags(|f| {
             f.remove(HeaderFlags::OPCODE);
             *f.0.bits_mut() |=
@@ -454,6 +469,7 @@ impl Header {
     }
 
     pub fn set_rcode(&mut self, rcode: RCode) {
+        // FIXME: this silently truncates [`RCode`]s above 15
         self.modify_flags(|f| {
             f.remove(HeaderFlags::RCODE);
             *f.0.bits_mut() |=

@@ -193,7 +193,7 @@ pub struct MessageDecoder<'a, S: Section> {
     addl_remaining: u16,
     r: Reader<'a>,
     has_errored: bool,
-    section: PhantomData<S>,
+    section: PhantomData<(S, *const ())>, // not Send/Sync
 }
 
 impl<'a> MessageDecoder<'a, section::Question> {
@@ -211,6 +211,50 @@ impl<'a> MessageDecoder<'a, section::Question> {
             has_errored: false,
             section: PhantomData,
         })
+    }
+
+    pub(crate) fn format(self, mut cb: impl FnMut(fmt::Arguments<'_>)) -> Result<(), Error> {
+        let mut msg = self;
+
+        let h = msg.header();
+        let dir = if h.is_query() { "query" } else { "response" };
+        let trunc = if h.is_truncated() { ", trunc" } else { "" };
+        let ra = if h.is_recursion_available() {
+            ", RA"
+        } else {
+            ""
+        };
+        let rd = if h.is_recursion_desired() { ", RD" } else { "" };
+        let aa = if h.is_authority() { ", AA" } else { "" };
+        cb(format_args!(
+            "{} (id={}, op={}, rcode={}{trunc}{ra}{rd}{aa})",
+            dir,
+            h.id(),
+            h.opcode(),
+            h.rcode(),
+        ));
+
+        for q in msg.iter() {
+            let q = q?;
+            cb(format_args!("Q: {}", q));
+        }
+        let mut msg = msg.answers()?;
+        for rr in msg.iter() {
+            let rr = rr?;
+            cb(format_args!("ANS: {}", rr));
+        }
+        let mut msg = msg.authority()?;
+        for rr in msg.iter() {
+            let rr = rr?;
+            cb(format_args!("AUTH: {}", rr));
+        }
+        let mut msg = msg.additional()?;
+        for rr in msg.iter() {
+            let rr = rr?;
+            cb(format_args!("ADDL: {}", rr));
+        }
+
+        Ok(())
     }
 }
 
@@ -534,32 +578,23 @@ impl fmt::Display for Question {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write;
+
+    use expect_test::{expect, Expect};
+
+    use crate::hex;
+
     use super::*;
 
-    #[cfg(nope)]
-    fn decode_msg(msg: &[u8]) {
-        let mut msg = MessageDecoder::new(msg).unwrap();
-        eprintln!("{:?}", msg.header());
-        for q in msg.iter() {
-            let q = q.unwrap();
-            log::debug!("Q: {}", q);
-        }
-        let mut msg = msg.answers().unwrap();
-        for rr in msg.iter() {
-            let rr = rr.unwrap();
-            log::debug!("ANS: {}", rr);
-        }
-        let mut msg = msg.authority().unwrap();
-        for rr in msg.iter() {
-            let rr = rr.unwrap();
-            log::debug!("AUTH: {}", rr);
-        }
-        let mut msg = msg.additional().unwrap();
-        eprintln!("{:?}", msg.r.buf());
-        for rr in msg.iter() {
-            let rr = rr.unwrap();
-            log::debug!("ADDL: {}", rr);
-        }
+    fn check_decode(packet: &str, expect: Expect) {
+        let packet = hex::parse(packet);
+        let dec = MessageDecoder::new(&packet).unwrap();
+
+        let mut out = String::new();
+        dec.format(|args| writeln!(out, "{}", args).unwrap())
+            .unwrap();
+
+        expect.assert_eq(&out);
     }
 
     #[test]
@@ -629,5 +664,34 @@ mod tests {
         ]);
         r.pos = 2;
         assert_eq!(r.read_domain_name(), Err(Error::PointerLoop));
+    }
+
+    #[test]
+    fn decode_dns_query() {
+        check_decode("303901000002000000000000076578616d706c6503636f6d0000010001076578616d706c6503636f6d00001c0001", expect![[r#"
+            query (id=12345, op=QUERY, rcode=NO_ERROR, RD)
+            Q: example.com.	IN	A
+            Q: example.com.	IN	AAAA
+        "#]]);
+
+        check_decode("303981800001000100000000076578616d706c6503636f6d0000060001c00c0006000100000e10002c026e73056963616e6e036f726700036e6f6303646e73c02c7886aa5a00001c2000000e100012750000000e10", expect![[r#"
+            response (id=12345, op=QUERY, rcode=NO_ERROR, RA, RD)
+            Q: example.com.	IN	SOA
+            ANS: example.com.	3600	IN	SOA	ns.icann.org.	noc.dns.icann.org.	2022091354	7200	3600	1209600	3600
+        "#]]);
+    }
+
+    #[test]
+    fn decode_mdns_sd() {
+        check_decode("303900000001000000000000095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001", expect![[r#"
+            query (id=12345, op=QUERY, rcode=NO_ERROR)
+            Q: _services._dns-sd._udp.local.	IN	PTR
+        "#]]);
+
+        check_decode("303984000001000100000000095f7365727669636573075f646e732d7364045f756470056c6f63616c00000c0001c00c000c00010000000a000e065f6361636865045f746370c023", expect![[r#"
+            response (id=12345, op=QUERY, rcode=NO_ERROR, AA)
+            Q: _services._dns-sd._udp.local.	IN	PTR
+            ANS: _services._dns-sd._udp.local.	10	IN	PTR	_cache._tcp.local.
+        "#]]);
     }
 }

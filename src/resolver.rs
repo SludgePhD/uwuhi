@@ -7,6 +7,7 @@ use std::{
 };
 
 use crate::{
+    hex::Hex,
     name::DomainName,
     packet::{
         decoder::MessageDecoder,
@@ -119,7 +120,7 @@ impl SyncResolver {
         let mut send_buf = [0; MDNS_BUFFER_SIZE];
         let data = encode_query(&mut send_buf, name);
 
-        log::trace!("resolving '{}', raw query: {:x?}", name, data);
+        log::trace!("resolving '{}', raw query: {}", name, Hex(data));
 
         // FIXME: retransmit
         for addr in &self.servers {
@@ -130,7 +131,7 @@ impl SyncResolver {
             let mut recv_buf = [0; DNS_BUFFER_SIZE];
             let (b, addr) = self.sock.recv_from(&mut recv_buf)?;
             let recv = &recv_buf[..b];
-            log::trace!("recv from {}: {:x?}", addr, recv);
+            log::trace!("recv from {}: {}", addr, Hex(recv));
 
             match decode_answer(recv, &mut self.ip_buf) {
                 Ok(()) => {

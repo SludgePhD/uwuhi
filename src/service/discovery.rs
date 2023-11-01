@@ -9,6 +9,7 @@ use std::{
 };
 
 use crate::{
+    hex::Hex,
     name::DomainName,
     packet::{
         decoder::MessageDecoder,
@@ -251,7 +252,7 @@ impl SyncDiscoverer {
                     Err(e) => return Err(e),
                 };
                 let recv = &recv_buf[..b];
-                log::trace!("recv from {}: {}", addr, recv.escape_ascii());
+                log::trace!("recv from {}: {}", addr, Hex(recv));
 
                 let res = decode_answer(recv, callback);
 
@@ -279,10 +280,10 @@ pub fn encode_query<'a>(buf: &'a mut [u8], domain: &DomainName, qtypes: &[QType]
     let data = &buf[..bytes];
 
     log::trace!(
-        "encode_query: domain={}, types={:?}, raw query={:x?}",
+        "encode_query: domain={}, types={:?}, raw query={}",
         domain,
         qtypes,
-        data,
+        Hex(data),
     );
 
     data

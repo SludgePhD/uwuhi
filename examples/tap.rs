@@ -7,7 +7,7 @@ use uwuhi::tap::SyncTap;
 
 fn main() -> io::Result<()> {
     env_logger::Builder::new()
-        .filter_module("uwuhi", LevelFilter::Trace)
+        .filter_module(env!("CARGO_PKG_NAME"), LevelFilter::Trace)
         .filter_module(env!("CARGO_CRATE_NAME"), LevelFilter::Trace)
         .init();
     SyncTap::new()?.listen()?;
