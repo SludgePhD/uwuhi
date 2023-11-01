@@ -1,9 +1,9 @@
 //! DNS packet decoder.
 
 use core::mem;
-use std::cmp;
+use std::{cmp, mem::size_of};
 
-use zerocopy::FromBytes;
+use crate::num::U32;
 
 use super::{
     name::{DomainName, Label},
@@ -30,10 +30,10 @@ impl<'a> Reader<'a> {
         &self.full_buf[self.pos..]
     }
 
-    pub(crate) fn read_obj<T: FromBytes>(&mut self) -> Result<T, Error> {
-        let t = T::read_from_prefix(self.buf()).ok_or(Error::Eof)?;
+    pub(crate) fn read_obj<T: AnyBitPattern>(&mut self) -> Result<T, Error> {
+        let bytes = self.buf().get(..size_of::<T>()).ok_or(Error::Eof)?;
         self.pos += mem::size_of::<T>();
-        Ok(t)
+        Ok(bytemuck::pod_read_unaligned(bytes))
     }
 
     fn peek_u8(&self) -> Result<u8, Error> {
@@ -211,6 +211,7 @@ pub mod section {
         }
     }
 }
+use bytemuck::AnyBitPattern;
 use section::Section;
 
 /// Streaming decoder for DNS messages.

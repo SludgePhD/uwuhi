@@ -11,7 +11,7 @@ macro_rules! ffi_enum {
         }
     ) => {
         $( #[$attrs] )*
-        #[derive(Clone, Copy, PartialEq, Eq, zerocopy::AsBytes, zerocopy::FromBytes)]
+        #[derive(Clone, Copy, PartialEq, Eq, bytemuck::Pod, bytemuck::Zeroable)]
         #[repr(transparent)]
         $v struct $name(pub(crate) $native);
 

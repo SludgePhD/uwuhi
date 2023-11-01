@@ -1,8 +1,7 @@
 //! DNS packet encoder.
 
 use core::marker::PhantomData;
-
-use zerocopy::{AsBytes, FromBytes, LayoutVerified};
+use std::mem::{align_of, size_of};
 
 use super::{
     name::DomainName,
@@ -26,10 +25,9 @@ impl<'a> Writer<'a> {
     }
 
     fn modify_header(&mut self, with: impl FnOnce(&mut Header)) {
-        let h = LayoutVerified::<_, Header>::new_unaligned_from_prefix(&mut self.buf[..])
-            .unwrap()
-            .0
-            .into_mut();
+        assert_eq!(align_of::<Header>(), 1);
+
+        let h = bytemuck::from_bytes_mut(&mut self.buf[..size_of::<Header>()]);
         with(h);
     }
 
@@ -45,8 +43,8 @@ impl<'a> Writer<'a> {
         }
     }
 
-    pub(crate) fn write_obj<T: AsBytes>(&mut self, obj: T) {
-        self.write_slice(obj.as_bytes())
+    pub(crate) fn write_obj<T: NoUninit>(&mut self, obj: T) {
+        self.write_slice(bytemuck::bytes_of(&obj))
     }
 
     pub(crate) fn write_u8(&mut self, b: u8) {
@@ -96,6 +94,7 @@ pub mod section {
     impl Section for Authority {}
     impl Section for Additional {}
 }
+use bytemuck::{NoUninit, Zeroable};
 use section::Section;
 
 struct EncoderInner<'a> {
@@ -154,7 +153,7 @@ impl<'a> MessageEncoder<'a, section::Question> {
     /// Creates a new message encoder that will write to `buf`.
     pub fn new(buf: &'a mut [u8]) -> Self {
         let mut w = Writer::new(buf);
-        w.write_obj(Header::new_zeroed());
+        w.write_obj(Header::zeroed());
         Self {
             inner: EncoderInner {
                 w,

@@ -15,10 +15,8 @@ pub use ref_or_val::RefOrVal;
 use core::fmt;
 
 use bitflags::bitflags;
-use zerocopy::{AsBytes, BigEndian, FromBytes, Unaligned};
 
-type U16 = zerocopy::byteorder::U16<BigEndian>;
-type U32 = zerocopy::byteorder::U32<BigEndian>;
+use crate::num::U16;
 
 ffi_enum! {
     /// DNS message operation codes.
@@ -360,7 +358,7 @@ impl HeaderFlags {
 }
 
 /// Packet header.
-#[derive(AsBytes, FromBytes, Unaligned, Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C, packed)]
 pub struct Header {
     id: U16,
@@ -379,7 +377,7 @@ impl Header {
     fn modify_flags(&mut self, with: impl FnOnce(&mut HeaderFlags)) {
         let mut flags = self.flags();
         with(&mut flags);
-        self.flags.set(flags.bits());
+        self.flags = flags.bits().into();
     }
 
     /// Returns the 16-bit packet ID.
@@ -393,7 +391,7 @@ impl Header {
 
     #[inline]
     pub fn set_id(&mut self, id: u16) {
-        self.id.set(id);
+        self.id = id.into();
     }
 
     #[inline]
@@ -485,19 +483,19 @@ impl Header {
     }
 
     fn set_qdcount(&mut self, qdcount: u16) {
-        self.qdcount.set(qdcount);
+        self.qdcount = qdcount.into();
     }
 
     fn set_ancount(&mut self, ancount: u16) {
-        self.ancount.set(ancount);
+        self.ancount = ancount.into();
     }
 
     fn set_nscount(&mut self, nscount: u16) {
-        self.nscount.set(nscount);
+        self.nscount = nscount.into();
     }
 
     fn set_arcount(&mut self, arcount: u16) {
-        self.arcount.set(arcount);
+        self.arcount = arcount.into();
     }
 }
 
