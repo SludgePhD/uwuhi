@@ -2,38 +2,21 @@
 
 use std::{
     fmt::{self, Write},
-    hash::{Hash, Hasher},
-    mem, slice,
+    slice,
     str::FromStr,
     vec,
 };
 
 use super::Error;
 
-// 1 discr. byte + 2 usizes for the `Outline` variant (padded to 3 * usize)
-// That means the inline variant can use `3 * usize - 1 byte` of total memory. One of those is used
-// for the length.
-const LABEL_MAX_INLINE_LEN: usize = mem::size_of::<usize>() * 3 - 1 - 1;
-// (this is 22 bytes on 64-bit systems, which is quite a lot)
-
-#[derive(Clone)]
-enum LabelRepr {
-    Inline {
-        buf: [u8; LABEL_MAX_INLINE_LEN],
-        len: u8,
-    },
-    Outline {
-        data: Box<[u8]>,
-    },
-}
-
 /// A `.`-separated component of a [`DomainName`].
 ///
 /// Labels consist of arbitrary bytes and have a maximum length of 63 bytes. This type can only
 /// represent non-empty labels, so the minimum length is 1 byte.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Label {
-    repr: LabelRepr,
+    // Guaranteed to contain >0 and at most `Label::MAX_LEN` bytes.
+    bytes: Box<[u8]>,
 }
 
 impl Label {
@@ -45,8 +28,7 @@ impl Label {
     ///
     /// # Panics
     ///
-    /// This function will panic if `bytes` is empty, contains more than [`Self::MAX_LEN`] bytes, or
-    /// contains bytes outside the ASCII range.
+    /// This function will panic if `bytes` is empty or contains more than [`Self::MAX_LEN`] bytes.
     pub fn new(label: impl AsRef<[u8]>) -> Self {
         Self::new_impl(label.as_ref())
     }
@@ -72,56 +54,14 @@ impl Label {
         }
 
         Ok(Self {
-            repr: if label.len() <= LABEL_MAX_INLINE_LEN {
-                let mut buf = [0; LABEL_MAX_INLINE_LEN];
-                buf[..label.len()].copy_from_slice(label);
-                LabelRepr::Inline {
-                    buf,
-                    len: label.len() as u8,
-                }
-            } else {
-                LabelRepr::Outline { data: label.into() }
-            },
+            bytes: label.into(),
         })
     }
 
     /// Returns the raw bytes of this label.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        match &self.repr {
-            LabelRepr::Inline { buf, len } => &buf[..usize::from(*len)],
-            LabelRepr::Outline { data } => data,
-        }
-    }
-}
-
-impl PartialEq for Label {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.as_bytes() == other.as_bytes()
-    }
-}
-
-impl Eq for Label {}
-
-impl PartialOrd for Label {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.as_bytes().partial_cmp(other.as_bytes())
-    }
-}
-
-impl Ord for Label {
-    #[inline]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.as_bytes().cmp(other.as_bytes())
-    }
-}
-
-impl Hash for Label {
-    #[inline]
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.as_bytes().hash(state);
+        &self.bytes
     }
 }
 
@@ -178,7 +118,7 @@ impl DomainName {
         &self.labels
     }
 
-    /// Appends a [`Label`] to the end this domain name.
+    /// Appends a [`Label`] to the end of this domain name.
     #[inline]
     pub fn push_label(&mut self, label: Label) {
         self.labels.push(label);
@@ -309,14 +249,7 @@ impl<'a> Iterator for Iter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::mem;
-
     use super::*;
-
-    #[test]
-    fn label_size() {
-        assert_eq!(mem::size_of::<Label>(), mem::size_of::<Vec<u8>>());
-    }
 
     #[test]
     fn display_label() {

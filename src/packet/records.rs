@@ -17,7 +17,7 @@ use super::{
     decoder::{self, Reader},
     encoder::Writer,
     name::DomainName,
-    Error, RefOrVal, Type,
+    Error, Type,
 };
 
 pub struct ResourceRecordEncoder<'a> {
@@ -45,10 +45,6 @@ macro_rules! records {
         $($record:ident),+ $(,)?
     ) => {
         /// Enumeration of all supported Resource Record types.
-        ///
-        /// If you care about code size, using this type is not advisable as it will include *all* Resource
-        /// Record types and their parsing code. Instead, individual members of this enum should be used as
-        /// needed.
         #[non_exhaustive]
         #[derive(Debug)]
         pub enum Record<'a> {
@@ -177,7 +173,8 @@ impl<'a> fmt::Display for AAAA<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CNAME<'a> {
-    name: RefOrVal<'a, DomainName>,
+    name: DomainName,
+    _p: PhantomData<&'a ()>,
 }
 
 impl<'a> ResourceRecordData<'a> for CNAME<'a> {
@@ -189,14 +186,18 @@ impl<'a> ResourceRecordData<'a> for CNAME<'a> {
 
     fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
         Ok(Self {
-            name: dec.r.read_domain_name()?.into(),
+            name: dec.r.read_domain_name()?,
+            _p: PhantomData,
         })
     }
 }
 
 impl<'a> CNAME<'a> {
-    pub fn new(name: impl Into<RefOrVal<'a, DomainName>>) -> Self {
-        Self { name: name.into() }
+    pub fn new(name: DomainName) -> Self {
+        Self {
+            name,
+            _p: PhantomData,
+        }
     }
 
     #[inline]
@@ -214,7 +215,8 @@ impl<'a> fmt::Display for CNAME<'a> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MX<'a> {
     preference: u16,
-    exchange: RefOrVal<'a, DomainName>,
+    exchange: DomainName,
+    _p: PhantomData<&'a ()>,
 }
 
 impl<'a> ResourceRecordData<'a> for MX<'a> {
@@ -228,16 +230,18 @@ impl<'a> ResourceRecordData<'a> for MX<'a> {
     fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             preference: dec.r.read_u16()?,
-            exchange: dec.r.read_domain_name()?.into(),
+            exchange: dec.r.read_domain_name()?,
+            _p: PhantomData,
         })
     }
 }
 
 impl<'a> MX<'a> {
-    pub fn new(preference: u16, exchange: impl Into<RefOrVal<'a, DomainName>>) -> Self {
+    pub fn new(preference: u16, exchange: DomainName) -> Self {
         Self {
             preference,
-            exchange: exchange.into(),
+            exchange,
+            _p: PhantomData,
         }
     }
 
@@ -260,7 +264,8 @@ impl<'a> fmt::Display for MX<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NS<'a> {
-    nsdname: RefOrVal<'a, DomainName>,
+    nsdname: DomainName,
+    _p: PhantomData<&'a ()>,
 }
 
 impl<'a> ResourceRecordData<'a> for NS<'a> {
@@ -272,15 +277,17 @@ impl<'a> ResourceRecordData<'a> for NS<'a> {
 
     fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
         Ok(Self {
-            nsdname: dec.r.read_domain_name()?.into(),
+            nsdname: dec.r.read_domain_name()?,
+            _p: PhantomData,
         })
     }
 }
 
 impl<'a> NS<'a> {
-    pub fn new(nsdname: impl Into<RefOrVal<'a, DomainName>>) -> Self {
+    pub fn new(nsdname: DomainName) -> Self {
         Self {
-            nsdname: nsdname.into(),
+            nsdname,
+            _p: PhantomData,
         }
     }
 
@@ -297,7 +304,8 @@ impl<'a> fmt::Display for NS<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PTR<'a> {
-    ptrdname: RefOrVal<'a, DomainName>,
+    ptrdname: DomainName,
+    _p: PhantomData<&'a ()>,
 }
 
 impl<'a> ResourceRecordData<'a> for PTR<'a> {
@@ -309,15 +317,17 @@ impl<'a> ResourceRecordData<'a> for PTR<'a> {
 
     fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
         Ok(Self {
-            ptrdname: dec.r.read_domain_name()?.into(),
+            ptrdname: dec.r.read_domain_name()?,
+            _p: PhantomData,
         })
     }
 }
 
 impl<'a> PTR<'a> {
-    pub fn new(ptrdname: impl Into<RefOrVal<'a, DomainName>>) -> Self {
+    pub fn new(ptrdname: DomainName) -> Self {
         Self {
-            ptrdname: ptrdname.into(),
+            ptrdname,
+            _p: PhantomData,
         }
     }
 
@@ -359,7 +369,7 @@ impl<'a> ResourceRecordData<'a> for TXT<'a> {
 }
 
 impl<'a> TXT<'a> {
-    /// Creates a new `TXT` resource record containing one or more `entries`.
+    /// Creates a new [`TXT`] resource record containing one or more `entries`.
     ///
     /// # Panics
     ///
@@ -409,7 +419,8 @@ pub struct SRV<'a> {
     priority: u16,
     weight: u16,
     port: u16,
-    target: RefOrVal<'a, DomainName>,
+    target: DomainName,
+    _p: PhantomData<&'a ()>,
 }
 
 impl<'a> ResourceRecordData<'a> for SRV<'a> {
@@ -427,23 +438,20 @@ impl<'a> ResourceRecordData<'a> for SRV<'a> {
             priority: dec.r.read_u16()?,
             weight: dec.r.read_u16()?,
             port: dec.r.read_u16()?,
-            target: dec.r.read_domain_name()?.into(),
+            target: dec.r.read_domain_name()?,
+            _p: PhantomData,
         })
     }
 }
 
 impl<'a> SRV<'a> {
-    pub fn new(
-        priority: u16,
-        weight: u16,
-        port: u16,
-        target: impl Into<RefOrVal<'a, DomainName>>,
-    ) -> Self {
+    pub fn new(priority: u16, weight: u16, port: u16, target: DomainName) -> Self {
         Self {
             priority,
             weight,
             port,
-            target: target.into(),
+            target,
+            _p: PhantomData,
         }
     }
 
@@ -482,13 +490,14 @@ impl<'a> fmt::Display for SRV<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SOA<'a> {
-    mname: RefOrVal<'a, DomainName>,
-    rname: RefOrVal<'a, DomainName>,
+    mname: DomainName,
+    rname: DomainName,
     serial: u32,
     refresh: u32,
     retry: u32,
     expire: u32,
     minimum_ttl: u32,
+    _p: PhantomData<&'a ()>,
 }
 
 impl<'a> ResourceRecordData<'a> for SOA<'a> {
@@ -506,21 +515,22 @@ impl<'a> ResourceRecordData<'a> for SOA<'a> {
 
     fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
         Ok(Self {
-            mname: dec.r.read_domain_name()?.into(),
-            rname: dec.r.read_domain_name()?.into(),
+            mname: dec.r.read_domain_name()?,
+            rname: dec.r.read_domain_name()?,
             serial: dec.r.read_u32()?,
             refresh: dec.r.read_u32()?,
             retry: dec.r.read_u32()?,
             expire: dec.r.read_u32()?,
             minimum_ttl: dec.r.read_u32()?,
+            _p: PhantomData,
         })
     }
 }
 
 impl<'a> SOA<'a> {
     pub fn new(
-        mname: impl Into<RefOrVal<'a, DomainName>>,
-        rname: impl Into<RefOrVal<'a, DomainName>>,
+        mname: DomainName,
+        rname: DomainName,
         serial: u32,
         refresh: u32,
         retry: u32,
@@ -528,13 +538,14 @@ impl<'a> SOA<'a> {
         minimum_ttl: u32,
     ) -> Self {
         Self {
-            mname: mname.into(),
-            rname: rname.into(),
+            mname,
+            rname,
             serial,
             refresh,
             retry,
             expire,
             minimum_ttl,
+            _p: PhantomData,
         }
     }
 

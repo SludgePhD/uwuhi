@@ -7,10 +7,8 @@ pub mod encoder;
 mod error;
 pub mod name;
 pub mod records;
-mod ref_or_val;
 
 pub use error::Error;
-pub use ref_or_val::RefOrVal;
 
 use core::fmt;
 

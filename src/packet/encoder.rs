@@ -167,7 +167,7 @@ impl<'a> MessageEncoder<'a, section::Question> {
     }
 
     /// Adds a question to the *Question* section.
-    pub fn question<'l>(&mut self, question: Question<'l>) {
+    pub fn question(&mut self, question: Question<'_>) {
         self.inner.w.write_domain_name(question.name);
         self.inner.w.write_u16(question.ty.0);
         self.inner.w.write_u16(question.class.0);
