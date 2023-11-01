@@ -1,7 +1,7 @@
 //! DNS packet decoder.
 
 use core::mem;
-use std::{any::TypeId, cmp, fmt, marker::PhantomData, mem::size_of};
+use std::{any::TypeId, cell::Cell, cmp, fmt, marker::PhantomData, mem::size_of};
 
 use bytemuck::AnyBitPattern;
 
@@ -22,42 +22,47 @@ pub(crate) struct Reader<'a> {
     /// The buffer containing the whole DNS message.
     full_buf: &'a [u8],
     /// The current reader position in the buffer.
-    pos: usize,
+    pos: Cell<usize>,
 }
 
 impl<'a> Reader<'a> {
     pub(crate) fn new(buf: &'a [u8]) -> Self {
         Self {
             full_buf: buf,
-            pos: 0,
+            pos: Cell::new(0),
         }
     }
 
     pub(crate) fn buf(&self) -> &'a [u8] {
-        &self.full_buf[self.pos..]
+        &self.full_buf[self.pos.get()..]
     }
 
-    pub(crate) fn read_obj<T: AnyBitPattern>(&mut self) -> Result<T, Error> {
+    fn advance(&self, by: usize) {
+        self.pos.set(self.pos.get() + by);
+    }
+
+    pub(crate) fn read_obj<T: AnyBitPattern>(&self) -> Result<T, Error> {
         let bytes = self.buf().get(..size_of::<T>()).ok_or(Error::Eof)?;
-        self.pos += mem::size_of::<T>();
+        self.advance(mem::size_of::<T>());
         Ok(bytemuck::pod_read_unaligned(bytes))
     }
 
     fn peek_u8(&self) -> Result<u8, Error> {
-        self.full_buf.get(self.pos).copied().ok_or(Error::Eof)
+        self.full_buf.get(self.pos.get()).copied().ok_or(Error::Eof)
     }
 
-    pub(crate) fn read_slice(&mut self, len: usize) -> Result<&'a [u8], Error> {
-        match self.full_buf.get(self.pos..self.pos + len) {
+    pub(crate) fn read_slice(&self, len: usize) -> Result<&'a [u8], Error> {
+        let pos = self.pos.get();
+        match self.full_buf.get(pos..pos + len) {
             Some(slice) => {
-                self.pos += len;
+                self.advance(len);
                 Ok(slice)
             }
             None => Err(Error::Eof),
         }
     }
 
-    pub(crate) fn read_array<const LEN: usize>(&mut self) -> Result<&'a [u8; LEN], Error> {
+    pub(crate) fn read_array<const LEN: usize>(&self) -> Result<&[u8; LEN], Error> {
         let slice = self.read_slice(LEN)?;
         Ok(slice.try_into().unwrap())
     }
@@ -66,39 +71,39 @@ impl<'a> Reader<'a> {
     /// `self.pos + len`.
     ///
     /// This can be used when another object is created that might need to refer back to older data.
-    fn split_off(&mut self, len: usize) -> Result<Reader<'a>, Error> {
+    fn split_off(&self, len: usize) -> Result<Reader<'a>, Error> {
         if self.buf().len() >= len {
             let mut copy = self.clone();
-            copy.full_buf = &copy.full_buf[..self.pos + len];
-            self.pos += len;
+            copy.full_buf = &copy.full_buf[..self.pos.get() + len];
+            self.advance(len);
             Ok(copy)
         } else {
             Err(Error::Eof)
         }
     }
 
-    pub(crate) fn read_u8(&mut self) -> Result<u8, Error> {
+    pub(crate) fn read_u8(&self) -> Result<u8, Error> {
         Ok(self.read_obj::<u8>()?)
     }
 
-    pub(crate) fn read_u16(&mut self) -> Result<u16, Error> {
+    pub(crate) fn read_u16(&self) -> Result<u16, Error> {
         Ok(self.read_obj::<U16>()?.get())
     }
 
-    pub(crate) fn read_u32(&mut self) -> Result<u32, Error> {
+    pub(crate) fn read_u32(&self) -> Result<u32, Error> {
         Ok(self.read_obj::<U32>()?.get())
     }
 
     /// Reads a `<character-string>` value.
-    pub(crate) fn read_character_string(&mut self) -> Result<&'a [u8], Error> {
+    pub(crate) fn read_character_string(&self) -> Result<&'a [u8], Error> {
         let length = self.read_u8()?;
         self.read_slice(length.into())
     }
 
     /// Reads a `<domain-name>` value.
-    pub(crate) fn read_domain_name(&mut self) -> Result<DomainName, Error> {
+    pub(crate) fn read_domain_name(&self) -> Result<DomainName, Error> {
         let mut domain_name = DomainName::ROOT;
-        let mut min_pos = self.pos;
+        let mut min_pos = self.pos.get();
         let mut copy = self.clone();
         loop {
             let length = copy.peek_u8()?;
@@ -112,13 +117,13 @@ impl<'a> Reader<'a> {
                         // allowed.
                         return Err(Error::PointerLoop);
                     } else {
-                        self.pos = cmp::max(self.pos, copy.pos);
+                        self.pos.set(cmp::max(self.pos.get(), copy.pos.get()));
                         min_pos = ptr;
-                        copy.pos = ptr;
+                        copy.pos = ptr.into();
                     }
                 }
                 0b0000_0000 => {
-                    copy.pos += 1;
+                    copy.advance(1);
 
                     // Length byte followed by a label of that many bytes.
                     let length = usize::from(length);
@@ -132,7 +137,7 @@ impl<'a> Reader<'a> {
             }
         }
 
-        self.pos = cmp::max(self.pos, copy.pos);
+        self.pos.set(cmp::max(self.pos.get(), copy.pos.get()));
         Ok(domain_name)
     }
 
@@ -199,7 +204,7 @@ pub struct MessageDecoder<'a, S: Section> {
 impl<'a> MessageDecoder<'a, section::Question> {
     /// Creates a streaming message decoder that will read from `buf`.
     pub fn new(buf: &'a [u8]) -> Result<Self, Error> {
-        let mut r = Reader::new(buf);
+        let r = Reader::new(buf);
         let header = r.read_obj::<Header>()?;
         Ok(Self {
             header,
@@ -480,8 +485,8 @@ impl<'a> ResourceRecord<'a> {
 
     /// If this is a supported record type, decodes it and returns the corresponding [`Record`].
     ///
-    /// Returns `None` if the record type is unsupported by this library.
-    pub fn as_enum(&self) -> Option<Result<Record<'a>, Error>> {
+    /// Returns [`None`] if the record type is unsupported by this library.
+    pub fn as_enum(&self) -> Option<Result<Record<'_>, Error>> {
         Record::from_rr(self)
     }
 }
@@ -599,20 +604,20 @@ mod tests {
 
     #[test]
     fn decode_domain_name() {
-        let mut r = Reader::new(&[
+        let r = Reader::new(&[
             7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'c', b'o', b'm', 0,
         ]);
         let name = r.read_domain_name().unwrap();
         assert_eq!(name.to_string(), "example.com.");
 
-        let mut r = Reader::new(&[0]);
+        let r = Reader::new(&[0]);
         let name = r.read_domain_name().unwrap();
         assert_eq!(name.to_string(), ".");
     }
 
     #[test]
     fn decode_domain_name_pointer() {
-        let mut r = Reader::new(&[
+        let r = Reader::new(&[
             b'_', // never read
             3,
             b'c',
@@ -631,7 +636,7 @@ mod tests {
             0b1100_0000,
             1,
         ]);
-        r.pos = 1;
+        r.pos.set(1);
         let name = r.read_domain_name().unwrap();
         assert_eq!(name.to_string(), "com.");
         let name = r.read_domain_name().unwrap();
@@ -641,20 +646,20 @@ mod tests {
 
     #[test]
     fn decode_domain_name_pointer_oob() {
-        let mut r = Reader::new(&[0xff, 0xff]);
+        let r = Reader::new(&[0xff, 0xff]);
         assert_eq!(r.read_domain_name(), Err(Error::PointerLoop));
     }
 
     #[test]
     fn decode_domain_name_dos() {
-        let mut r = Reader::new(&[
+        let r = Reader::new(&[
             // pointer to self:
             0b1100_0000,
             0,
         ]);
         assert_eq!(r.read_domain_name(), Err(Error::PointerLoop));
 
-        let mut r = Reader::new(&[
+        let r = Reader::new(&[
             // fallthrough:
             1,
             b'a',
@@ -662,7 +667,7 @@ mod tests {
             0b1100_0000,
             0,
         ]);
-        r.pos = 2;
+        r.pos.set(2);
         assert_eq!(r.read_domain_name(), Err(Error::PointerLoop));
     }
 

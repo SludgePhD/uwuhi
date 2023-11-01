@@ -21,24 +21,30 @@ use super::{
     Type,
 };
 
-pub struct ResourceRecordEncoder<'a> {
+/// Resource Record writer.
+///
+/// This is an opaque, internal type passed to [`RecordData::encode`].
+pub struct Encoder<'a> {
     pub(crate) w: Writer<'a>,
 }
 
-pub struct ResourceRecordDecoder<'a> {
+/// Resource Record reader.
+///
+/// This is an opaque, internal type passed to [`RecordData::decode`].
+pub struct Decoder<'a> {
     pub(crate) r: Reader<'a>,
 }
 
 /// Trait implemented by all resource record types.
-pub trait ResourceRecordData<'a>: Sized {
+pub trait RecordData<'a>: Sized {
     /// The associated resource record type.
     const TYPE: Type;
 
     /// Writes the data of this resource record to the given encoder.
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>);
+    fn encode(&self, enc: &mut Encoder<'_>);
 
     /// Attempts to decode an instance of this resource record from an RDATA field.
-    fn decode(r: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error>;
+    fn decode(r: &mut Decoder<'a>) -> Result<Self, Error>;
 }
 
 macro_rules! records {
@@ -54,7 +60,7 @@ macro_rules! records {
 
         impl<'a> Record<'a> {
             pub(crate) fn from_rr(rr: &decoder::ResourceRecord<'a>) -> Option<Result<Self, Error>> {
-                let r = &mut ResourceRecordDecoder {
+                let r = &mut Decoder {
                     r: rr.rdata.clone(),
                 };
                 Some(match rr.type_() {
@@ -63,7 +69,7 @@ macro_rules! records {
                 })
             }
 
-            pub(crate) fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+            pub(crate) fn encode(&self, enc: &mut Encoder<'_>) {
                 match self {
                     $( Record::$record(rr) => rr.encode(enc), )+
                 }
@@ -88,20 +94,28 @@ macro_rules! records {
 
 records!(A, AAAA, CNAME, MX, NS, PTR, TXT, SRV, SOA);
 
+/// A record storing an IPv4 address.
+///
+/// An [`A`] record is used to map a domain name to the IPv4 address(es) it can be reached under.
+/// A domain name can have multiple [`A`] records (for DNS-based round-robin load balancing), or
+/// none at all (instead making use of a [`CNAME`] record to point to another domain).
+///
+/// Also see [`AAAA`] for the IPv6 equivalent. Both [`A`] and [`AAAA`] records can be present for a
+/// domain, making it reachable via both IPv4 and IPv6.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct A<'a> {
     addr: Ipv4Addr,
     _p: PhantomData<&'a [u8]>,
 }
 
-impl<'a> ResourceRecordData<'a> for A<'a> {
+impl<'a> RecordData<'a> for A<'a> {
     const TYPE: Type = Type::A;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         enc.w.write_slice(&self.addr.octets())
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             addr: Ipv4Addr::from(*dec.r.read_array()?),
             _p: PhantomData,
@@ -110,6 +124,7 @@ impl<'a> ResourceRecordData<'a> for A<'a> {
 }
 
 impl<'a> A<'a> {
+    /// Creates a new [`A`] record storing the given [`Ipv4Addr`].
     #[inline]
     pub fn new(addr: Ipv4Addr) -> Self {
         Self {
@@ -118,6 +133,7 @@ impl<'a> A<'a> {
         }
     }
 
+    /// Returns the [`Ipv4Addr`] stored in this [`A`] record.
     #[inline]
     pub fn addr(&self) -> Ipv4Addr {
         self.addr
@@ -130,20 +146,26 @@ impl<'a> fmt::Display for A<'a> {
     }
 }
 
+/// A record storing an IPv6 address.
+///
+/// An [`AAAA`] record is used to map a domain name to the IPv6 address(es) it can be reached under.
+///
+/// Also see [`A`] for the IPv4 equivalent. Both [`A`] and [`AAAA`] records can be present for a
+/// domain, making it reachable via both IPv4 and IPv6.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AAAA<'a> {
     addr: Ipv6Addr,
     _p: PhantomData<&'a [u8]>,
 }
 
-impl<'a> ResourceRecordData<'a> for AAAA<'a> {
+impl<'a> RecordData<'a> for AAAA<'a> {
     const TYPE: Type = Type::AAAA;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         enc.w.write_slice(&self.addr.octets());
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             addr: Ipv6Addr::from(*dec.r.read_array()?),
             _p: PhantomData,
@@ -152,6 +174,7 @@ impl<'a> ResourceRecordData<'a> for AAAA<'a> {
 }
 
 impl<'a> AAAA<'a> {
+    /// Creates a new [`AAAA`] record storing the given [`Ipv6Addr`].
     #[inline]
     pub fn new(addr: Ipv6Addr) -> Self {
         Self {
@@ -160,6 +183,7 @@ impl<'a> AAAA<'a> {
         }
     }
 
+    /// Returns the [`Ipv6Addr`] stored in this [`AAAA`] record.
     #[inline]
     pub fn addr(&self) -> Ipv6Addr {
         self.addr
@@ -172,20 +196,32 @@ impl<'a> fmt::Display for AAAA<'a> {
     }
 }
 
+/// A record storing the *Canonical Name* of a domain.
+///
+/// [`CNAME`] records are used to map one domain name to another, instructing the DNS client to
+/// instead use the address records of the target (canonical) domain. This is often used when a
+/// single web server is hosting multiple subdomains.
+///
+/// A domain with a [`CNAME`] record should not have any other records except DNSSEC-related ones.
+///
+/// Domains with [`CNAME`] records are typically forbidden from being listed as the target of other
+/// resource record types. For instace, a domain that has a [`CNAME`] record is not allowed to be
+/// listed as a mail server in an [`MX`] record, nor as an authoritative name server in an [`NS`]
+/// record. The canonical name should be used instead.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CNAME<'a> {
     name: DomainName,
     _p: PhantomData<&'a ()>,
 }
 
-impl<'a> ResourceRecordData<'a> for CNAME<'a> {
+impl<'a> RecordData<'a> for CNAME<'a> {
     const TYPE: Type = Type::CNAME;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         enc.w.write_domain_name(&self.name);
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             name: dec.r.read_domain_name()?,
             _p: PhantomData,
@@ -194,6 +230,7 @@ impl<'a> ResourceRecordData<'a> for CNAME<'a> {
 }
 
 impl<'a> CNAME<'a> {
+    /// Creates a new [`CNAME`] record from the *Canonical Name*.
     pub fn new(name: DomainName) -> Self {
         Self {
             name,
@@ -201,6 +238,7 @@ impl<'a> CNAME<'a> {
         }
     }
 
+    /// Returns the canonical [`DomainName`] stored in this [`CNAME`] record.
     #[inline]
     pub fn cname(&self) -> &DomainName {
         &self.name
@@ -213,6 +251,9 @@ impl<'a> fmt::Display for CNAME<'a> {
     }
 }
 
+/// A **M**ail e**X**changer record specifies the mail server in charge of a domain.
+///
+/// A domain can have multiple [`MX`] records pointing to different mail servers for load balancing.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MX<'a> {
     preference: u16,
@@ -220,15 +261,15 @@ pub struct MX<'a> {
     _p: PhantomData<&'a ()>,
 }
 
-impl<'a> ResourceRecordData<'a> for MX<'a> {
+impl<'a> RecordData<'a> for MX<'a> {
     const TYPE: Type = Type::MX;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         enc.w.write_u16(self.preference);
         enc.w.write_domain_name(&self.exchange);
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             preference: dec.r.read_u16()?,
             exchange: dec.r.read_domain_name()?,
@@ -238,6 +279,8 @@ impl<'a> ResourceRecordData<'a> for MX<'a> {
 }
 
 impl<'a> MX<'a> {
+    /// Creates a new [`MX`] record from its preference number and the mail server's [`DomainName`].
+    #[inline]
     pub fn new(preference: u16, exchange: DomainName) -> Self {
         Self {
             preference,
@@ -246,11 +289,17 @@ impl<'a> MX<'a> {
         }
     }
 
+    /// Returns the *preference number* of this [`MX`] record.
+    ///
+    /// The *preference number* tells the client which mail servers to prefer. Lower numbers are
+    /// preferred over higher numbers, and multiple servers with equal preference numbers are
+    /// contacted in random order by the MTA.
     #[inline]
     pub fn preference(&self) -> u16 {
         self.preference
     }
 
+    /// Returns the [`DomainName`] of the mail server.
     #[inline]
     pub fn exchange(&self) -> &DomainName {
         &self.exchange
@@ -263,20 +312,26 @@ impl<'a> fmt::Display for MX<'a> {
     }
 }
 
+/// A record storing the authoritative **N**ame **S**erver for a domain.
+///
+/// This record type is used by recursive resolvers to locate the appropriate name servers to
+/// contact.
+///
+/// Several [`NS`] records can be used by the same domain name to increase redundancy.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NS<'a> {
     nsdname: DomainName,
     _p: PhantomData<&'a ()>,
 }
 
-impl<'a> ResourceRecordData<'a> for NS<'a> {
+impl<'a> RecordData<'a> for NS<'a> {
     const TYPE: Type = Type::NS;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         enc.w.write_domain_name(&self.nsdname);
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             nsdname: dec.r.read_domain_name()?,
             _p: PhantomData,
@@ -285,6 +340,7 @@ impl<'a> ResourceRecordData<'a> for NS<'a> {
 }
 
 impl<'a> NS<'a> {
+    /// Creates an [`NS`] record from the [`DomainName`] of the authoritative name server.
     pub fn new(nsdname: DomainName) -> Self {
         Self {
             nsdname,
@@ -292,6 +348,7 @@ impl<'a> NS<'a> {
         }
     }
 
+    /// Returns the [`DomainName`] of the authoritative name server.
     pub fn nsdname(&self) -> &DomainName {
         &self.nsdname
     }
@@ -303,20 +360,24 @@ impl<'a> fmt::Display for NS<'a> {
     }
 }
 
+/// A record storing the [`DomainName`] associated with an IP address.
+///
+/// This record type is used by *reverse DNS*, so [`PTR`] records are not associated with the
+/// human-readable domain name, but with the `in-addr.arpa` namespace.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PTR<'a> {
     ptrdname: DomainName,
     _p: PhantomData<&'a ()>,
 }
 
-impl<'a> ResourceRecordData<'a> for PTR<'a> {
+impl<'a> RecordData<'a> for PTR<'a> {
     const TYPE: Type = Type::PTR;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         enc.w.write_domain_name(&self.ptrdname);
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             ptrdname: dec.r.read_domain_name()?,
             _p: PhantomData,
@@ -325,6 +386,7 @@ impl<'a> ResourceRecordData<'a> for PTR<'a> {
 }
 
 impl<'a> PTR<'a> {
+    /// Creates a [`PTR`] record from the [`DomainName`] of an IP address.
     pub fn new(ptrdname: DomainName) -> Self {
         Self {
             ptrdname,
@@ -332,6 +394,7 @@ impl<'a> PTR<'a> {
         }
     }
 
+    /// Returns the [`DomainName`] stored by this [`PTR`] record.
     pub fn ptrdname(&self) -> &DomainName {
         &self.ptrdname
     }
@@ -343,21 +406,30 @@ impl<'a> fmt::Display for PTR<'a> {
     }
 }
 
+/// A free-form data record.
+///
+/// A [`TXT`] record stores arbitrary data that is up for interpretation by a higher layer. It is
+/// frequently used to convey information about an mDNS service without requiring a client
+/// to connect to the service to obtain the information.
+///
+/// A domain may have multiple [`TXT`] records, and each [`TXT`] record can store multiple blobs of
+/// data (but must contain at least one entry). Typically, information pertaining to a service must
+/// be stored as several entries in a single [`TXT`] record.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TXT<'a> {
     entries: Vec<Cow<'a, [u8]>>,
 }
 
-impl<'a> ResourceRecordData<'a> for TXT<'a> {
+impl<'a> RecordData<'a> for TXT<'a> {
     const TYPE: Type = Type::TXT;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         for entry in self.entries() {
             enc.w.write_character_string(entry);
         }
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         let mut entries = Vec::new();
 
         // Technically at least one is required, but we accept 0 too.
@@ -424,17 +496,17 @@ pub struct SRV<'a> {
     _p: PhantomData<&'a ()>,
 }
 
-impl<'a> ResourceRecordData<'a> for SRV<'a> {
+impl<'a> RecordData<'a> for SRV<'a> {
     const TYPE: Type = Type::SRV;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         enc.w.write_u16(self.priority);
         enc.w.write_u16(self.weight);
         enc.w.write_u16(self.port);
         enc.w.write_domain_name(&self.target);
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             priority: dec.r.read_u16()?,
             weight: dec.r.read_u16()?,
@@ -501,10 +573,10 @@ pub struct SOA<'a> {
     _p: PhantomData<&'a ()>,
 }
 
-impl<'a> ResourceRecordData<'a> for SOA<'a> {
+impl<'a> RecordData<'a> for SOA<'a> {
     const TYPE: Type = Type::SOA;
 
-    fn encode(&self, enc: &mut ResourceRecordEncoder<'_>) {
+    fn encode(&self, enc: &mut Encoder<'_>) {
         enc.w.write_domain_name(&self.mname);
         enc.w.write_domain_name(&self.rname);
         enc.w.write_u32(self.serial);
@@ -514,7 +586,7 @@ impl<'a> ResourceRecordData<'a> for SOA<'a> {
         enc.w.write_u32(self.minimum_ttl);
     }
 
-    fn decode(dec: &mut ResourceRecordDecoder<'a>) -> Result<Self, Error> {
+    fn decode(dec: &mut Decoder<'a>) -> Result<Self, Error> {
         Ok(Self {
             mname: dec.r.read_domain_name()?,
             rname: dec.r.read_domain_name()?,
@@ -607,17 +679,14 @@ impl<'a> fmt::Display for SOA<'a> {
 mod tests {
     use super::*;
 
-    fn roundtrip<'a, R: ResourceRecordData<'a> + PartialEq + std::fmt::Debug>(
-        rr: R,
-        buf: &'a mut [u8],
-    ) {
-        let mut enc = ResourceRecordEncoder {
+    fn roundtrip<'a, R: RecordData<'a> + PartialEq + std::fmt::Debug>(rr: R, buf: &'a mut [u8]) {
+        let mut enc = Encoder {
             w: Writer::new(buf),
         };
         rr.encode(&mut enc);
         let pos = enc.w.pos;
         let buf = &buf[..pos];
-        let mut dec = ResourceRecordDecoder {
+        let mut dec = Decoder {
             r: Reader::new(buf),
         };
         let decoded = R::decode(&mut dec).unwrap();

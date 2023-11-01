@@ -8,7 +8,7 @@ use bytemuck::{NoUninit, Zeroable};
 use crate::{name::DomainName, Error};
 
 use super::{
-    records::{Record, ResourceRecordEncoder},
+    records::{Encoder, Record},
     section::{self, Section},
     Class, Header, QClass, QType,
 };
@@ -187,7 +187,7 @@ impl<'a, S: Section> MessageEncoder<'a, S> {
         let lenpos = w.pos;
         w.write_u16(0); // dummy length
         let before_rdata = w.pos;
-        let mut enc = ResourceRecordEncoder {
+        let mut enc = Encoder {
             w: Writer {
                 buf: &mut *w.buf,
                 pos: w.pos,
