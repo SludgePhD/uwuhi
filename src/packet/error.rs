@@ -1,6 +1,6 @@
 use std::{fmt, io};
 
-/// Errors that may occur during message decoding.
+/// Non-I/O errors that may occur during message decoding.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[non_exhaustive]
 pub enum Error {

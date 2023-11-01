@@ -1,20 +1,24 @@
 //! DNS packet decoder.
 
 use core::mem;
-use std::{cmp, mem::size_of};
+use std::{any::TypeId, cmp, fmt, marker::PhantomData, mem::size_of};
 
-use crate::num::U32;
+use bytemuck::AnyBitPattern;
+
+use crate::num::{U16, U32};
 
 use super::{
     name::{DomainName, Label},
     records::Record,
+    section::{self, Section},
+    Class, Error, Header, QClass, QType, Type,
 };
-
-use super::*;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Reader<'a> {
+    /// The buffer containing the whole DNS message.
     full_buf: &'a [u8],
+    /// The current reader position in the buffer.
     pos: usize,
 }
 
@@ -166,54 +170,6 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// DNS message sections.
-pub mod section {
-    mod sealed {
-        pub trait Sealed {}
-    }
-    pub trait Section: sealed::Sealed {
-        fn remaining(&mut self) -> &mut u16;
-    }
-    pub struct Question {
-        pub(super) remaining: u16,
-    }
-    pub struct Answer {
-        pub(super) remaining: u16,
-    }
-    pub struct Authority {
-        pub(super) remaining: u16,
-    }
-    pub struct Additional {
-        pub(super) remaining: u16,
-    }
-    impl sealed::Sealed for Question {}
-    impl sealed::Sealed for Answer {}
-    impl sealed::Sealed for Authority {}
-    impl sealed::Sealed for Additional {}
-    impl Section for Question {
-        fn remaining(&mut self) -> &mut u16 {
-            &mut self.remaining
-        }
-    }
-    impl Section for Answer {
-        fn remaining(&mut self) -> &mut u16 {
-            &mut self.remaining
-        }
-    }
-    impl Section for Authority {
-        fn remaining(&mut self) -> &mut u16 {
-            &mut self.remaining
-        }
-    }
-    impl Section for Additional {
-        fn remaining(&mut self) -> &mut u16 {
-            &mut self.remaining
-        }
-    }
-}
-use bytemuck::AnyBitPattern;
-use section::Section;
-
 /// Streaming decoder for DNS messages.
 ///
 /// In DNS messages, sections are ordered as follows:
@@ -228,9 +184,13 @@ use section::Section;
 /// methods.
 pub struct MessageDecoder<'a, S: Section> {
     header: Header,
+    q_remaining: u16,
+    ans_remaining: u16,
+    auth_remaining: u16,
+    addl_remaining: u16,
     r: Reader<'a>,
     has_errored: bool,
-    section: S,
+    section: PhantomData<S>,
 }
 
 impl<'a> MessageDecoder<'a, section::Question> {
@@ -240,11 +200,13 @@ impl<'a> MessageDecoder<'a, section::Question> {
         let header = r.read_obj::<Header>()?;
         Ok(Self {
             header,
+            q_remaining: header.question_count(),
+            ans_remaining: header.answer_count(),
+            auth_remaining: header.authoritative_count(),
+            addl_remaining: header.additional_count(),
             r,
             has_errored: false,
-            section: section::Question {
-                remaining: header.qdcount.get(),
-            },
+            section: PhantomData,
         })
     }
 }
@@ -256,8 +218,35 @@ impl<'a, S: Section> MessageDecoder<'a, S> {
         &self.header
     }
 
+    fn remaining(&mut self) -> &mut u16 {
+        if TypeId::of::<S>() == TypeId::of::<section::Question>() {
+            &mut self.q_remaining
+        } else if TypeId::of::<S>() == TypeId::of::<section::Answer>() {
+            &mut self.ans_remaining
+        } else if TypeId::of::<S>() == TypeId::of::<section::Authority>() {
+            &mut self.auth_remaining
+        } else if TypeId::of::<S>() == TypeId::of::<section::Additional>() {
+            &mut self.addl_remaining
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn change_section<N: Section>(self) -> MessageDecoder<'a, N> {
+        MessageDecoder {
+            header: self.header,
+            q_remaining: self.q_remaining,
+            ans_remaining: self.ans_remaining,
+            auth_remaining: self.auth_remaining,
+            addl_remaining: self.addl_remaining,
+            r: self.r,
+            has_errored: self.has_errored,
+            section: PhantomData,
+        }
+    }
+
     fn next_rr(&mut self) -> Option<Result<ResourceRecord<'a>, Error>> {
-        if self.has_errored || *self.section.remaining() == 0 {
+        if self.has_errored || *self.remaining() == 0 {
             return None;
         }
 
@@ -269,7 +258,7 @@ impl<'a, S: Section> MessageDecoder<'a, S> {
             }
         };
 
-        *self.section.remaining() -= 1;
+        *self.remaining() -= 1;
 
         Some(Ok(rr))
     }
@@ -278,7 +267,7 @@ impl<'a, S: Section> MessageDecoder<'a, S> {
 impl<'a> MessageDecoder<'a, section::Question> {
     /// Reads the next [`Question`] from the *Question* section.
     pub fn next(&mut self) -> Option<Result<Question, Error>> {
-        if self.has_errored || self.section.remaining == 0 {
+        if self.has_errored || *self.remaining() == 0 {
             return None;
         }
 
@@ -290,7 +279,7 @@ impl<'a> MessageDecoder<'a, section::Question> {
             }
         };
 
-        self.section.remaining -= 1;
+        *self.remaining() -= 1;
 
         Some(Ok(question))
     }
@@ -307,14 +296,7 @@ impl<'a> MessageDecoder<'a, section::Question> {
             res?;
         }
 
-        Ok(MessageDecoder {
-            header: self.header,
-            r: self.r,
-            has_errored: self.has_errored,
-            section: section::Answer {
-                remaining: self.header.ancount.get(),
-            },
-        })
+        Ok(self.change_section())
     }
 
     /// Skips the remaining entries in the *Question* section, as well as all entries in the
@@ -349,14 +331,7 @@ impl<'a> MessageDecoder<'a, section::Answer> {
             res?;
         }
 
-        Ok(MessageDecoder {
-            header: self.header,
-            r: self.r,
-            has_errored: self.has_errored,
-            section: section::Authority {
-                remaining: self.header.nscount.get(),
-            },
-        })
+        Ok(self.change_section())
     }
 
     /// Skips the remaining entries in the *Answer* section, as well as all entries in the
@@ -382,14 +357,7 @@ impl<'a> MessageDecoder<'a, section::Authority> {
             res?;
         }
 
-        Ok(MessageDecoder {
-            header: self.header,
-            r: self.r,
-            has_errored: self.has_errored,
-            section: section::Additional {
-                remaining: self.header.arcount.get(),
-            },
-        })
+        Ok(self.change_section())
     }
 }
 

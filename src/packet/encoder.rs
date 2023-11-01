@@ -3,9 +3,12 @@
 use core::marker::PhantomData;
 use std::mem::{align_of, size_of};
 
+use bytemuck::{NoUninit, Zeroable};
+
 use super::{
     name::DomainName,
     records::{Record, ResourceRecordEncoder},
+    section::{self, Section},
     Class, Error, Header, QClass, QType,
 };
 
@@ -75,28 +78,6 @@ impl<'a> Writer<'a> {
     }
 }
 
-/// DNS message sections.
-pub mod section {
-    mod sealed {
-        pub trait Sealed {}
-    }
-    pub trait Section: sealed::Sealed {}
-    pub enum Question {}
-    pub enum Answer {}
-    pub enum Authority {}
-    pub enum Additional {}
-    impl sealed::Sealed for Question {}
-    impl sealed::Sealed for Answer {}
-    impl sealed::Sealed for Authority {}
-    impl sealed::Sealed for Additional {}
-    impl Section for Question {}
-    impl Section for Answer {}
-    impl Section for Authority {}
-    impl Section for Additional {}
-}
-use bytemuck::{NoUninit, Zeroable};
-use section::Section;
-
 struct EncoderInner<'a> {
     w: Writer<'a>,
     qdcount: u16,
@@ -124,7 +105,7 @@ pub struct MessageEncoder<'a, S: Section> {
 }
 
 impl<'a, S: Section> MessageEncoder<'a, S> {
-    /// Overrides the whole message header.
+    /// Sets the message header.
     ///
     /// Note that the [`MessageEncoder`] will modify some header fields on drop, to ensure that the
     /// message can be parsed correctly.
@@ -151,6 +132,16 @@ impl<'a, S: Section> MessageEncoder<'a, S> {
 
 impl<'a> MessageEncoder<'a, section::Question> {
     /// Creates a new message encoder that will write to `buf`.
+    ///
+    /// Initially, the encoder will be in the *Question* state, in which questions can be appended
+    /// to the message by calling [`MessageEncoder::question`]. The encoder can either be moved to
+    /// the next section by calling the appropriate method, or be dropped, which will finish the
+    /// encoded message.
+    ///
+    /// # Panics
+    ///
+    /// `buf` must be large enough to fit at least the message header (`size_of::<Header>()`),
+    /// otherwise this function will panic.
     pub fn new(buf: &'a mut [u8]) -> Self {
         let mut w = Writer::new(buf);
         w.write_obj(Header::zeroed());

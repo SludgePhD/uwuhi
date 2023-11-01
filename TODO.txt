@@ -1,2 +1,3 @@
 - figure out how to eagerly announce a service even when no query is received
 - figure out which retransmit/re-announce intervals to use
+- reorg the `packet` module legacy structure

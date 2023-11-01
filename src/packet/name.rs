@@ -272,5 +272,6 @@ mod tests {
         assert_eq!(".".parse::<DomainName>(), Ok(DomainName::ROOT));
         assert_eq!("com.".parse::<DomainName>().unwrap().to_string(), "com.");
         assert_eq!("com.".parse::<DomainName>().unwrap().labels().len(), 1);
+        assert_eq!(DomainName::ROOT.labels().len(), 0);
     }
 }
