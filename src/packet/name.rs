@@ -7,7 +7,7 @@ use std::{
     vec,
 };
 
-use super::Error;
+use crate::Error;
 
 /// A `.`-separated component of a [`DomainName`].
 ///

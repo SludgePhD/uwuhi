@@ -13,11 +13,13 @@ use std::{
     net::{Ipv4Addr, Ipv6Addr},
 };
 
+use crate::Error;
+
 use super::{
     decoder::{self, Reader},
     encoder::Writer,
     name::DomainName,
-    Error, Type,
+    Type,
 };
 
 pub struct ResourceRecordEncoder<'a> {

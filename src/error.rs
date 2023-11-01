@@ -1,6 +1,9 @@
 use std::{fmt, io};
 
 /// Non-I/O errors that may occur during message decoding.
+///
+/// The parts of the library that perform I/O use [`std::io::Error`] instead. This error type can be
+/// converted to [`std::io::Error`] via [`From`]/[`Into`].
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[non_exhaustive]
 pub enum Error {

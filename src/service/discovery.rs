@@ -8,12 +8,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::packet::{
-    decoder::MessageDecoder,
-    encoder::{self, MessageEncoder},
-    name::DomainName,
-    records::Record,
-    Error, Header, QType,
+use crate::{
+    packet::{
+        decoder::MessageDecoder,
+        encoder::{self, MessageEncoder},
+        name::DomainName,
+        records::Record,
+        Header, QType,
+    },
+    Error,
 };
 
 use crate::MDNS_BUFFER_SIZE;

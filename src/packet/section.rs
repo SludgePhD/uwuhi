@@ -16,7 +16,7 @@ pub enum Answer {}
 /// Represents the *Authority* section of a DNS message.
 pub enum Authority {}
 
-/// Represents the *Additional* section of a DNS message.
+/// Represents the *Additional Records* section of a DNS message.
 pub enum Additional {}
 
 impl sealed::Sealed for Question {}

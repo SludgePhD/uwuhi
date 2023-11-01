@@ -5,11 +5,13 @@ use std::mem::{align_of, size_of};
 
 use bytemuck::{NoUninit, Zeroable};
 
+use crate::Error;
+
 use super::{
     name::DomainName,
     records::{Record, ResourceRecordEncoder},
     section::{self, Section},
-    Class, Error, Header, QClass, QType,
+    Class, Header, QClass, QType,
 };
 
 pub(crate) struct Writer<'a> {

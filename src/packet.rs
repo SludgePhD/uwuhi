@@ -4,12 +4,9 @@
 mod macros;
 pub mod decoder;
 pub mod encoder;
-mod error;
 pub mod name;
 pub mod records;
 pub mod section;
-
-pub use error::Error;
 
 use core::fmt;
 

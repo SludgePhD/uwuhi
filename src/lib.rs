@@ -1,10 +1,13 @@
 //! Unicast and Multicast DNS and DNS Service Discovery implementation.
 
+mod error;
 mod num;
 pub mod packet;
 pub mod resolver;
 pub mod service;
 pub mod tap;
+
+pub use error::Error;
 
 /// Size of unicast DNS message buffers.
 ///

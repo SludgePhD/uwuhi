@@ -6,12 +6,15 @@ use std::{
     time::Duration,
 };
 
-use crate::packet::{
-    decoder::MessageDecoder,
-    encoder::{MessageEncoder, Question},
-    name::DomainName,
-    records::Record,
-    Error, Header, QType,
+use crate::{
+    packet::{
+        decoder::MessageDecoder,
+        encoder::{MessageEncoder, Question},
+        name::DomainName,
+        records::Record,
+        Header, QType,
+    },
+    Error,
 };
 
 use crate::{DNS_BUFFER_SIZE, MDNS_BUFFER_SIZE};

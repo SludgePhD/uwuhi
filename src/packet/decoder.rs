@@ -5,13 +5,16 @@ use std::{any::TypeId, cmp, fmt, marker::PhantomData, mem::size_of};
 
 use bytemuck::AnyBitPattern;
 
-use crate::num::{U16, U32};
+use crate::{
+    num::{U16, U32},
+    Error,
+};
 
 use super::{
     name::{DomainName, Label},
     records::Record,
     section::{self, Section},
-    Class, Error, Header, QClass, QType, Type,
+    Class, Header, QClass, QType, Type,
 };
 
 #[derive(Debug, Clone)]

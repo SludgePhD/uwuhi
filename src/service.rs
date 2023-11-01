@@ -5,9 +5,11 @@ use std::{
     fmt,
 };
 
-use crate::packet::{
-    name::{DomainName, Label},
-    records::{PTR, SRV, TXT},
+use crate::{
+    packet::{
+        name::{DomainName, Label},
+        records::{PTR, SRV, TXT},
+    },
     Error,
 };
 

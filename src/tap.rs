@@ -5,7 +5,7 @@ use std::{
     net::{Ipv4Addr, SocketAddr, UdpSocket},
 };
 
-use crate::packet::{decoder::MessageDecoder, Error};
+use crate::{packet::decoder::MessageDecoder, Error};
 use socket2::{Domain, Protocol, Socket, Type};
 
 use crate::MDNS_BUFFER_SIZE;
