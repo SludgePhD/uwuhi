@@ -3,12 +3,13 @@
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     io,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     ops::ControlFlow,
     time::{Duration, Instant},
 };
 
-use async_std::{future, net::UdpSocket};
+use async_io::{Async, Timer};
+use futures_lite::future;
 use uwuhi::{
     name::DomainName,
     packet::{records::Record, QType},
@@ -19,7 +20,7 @@ use uwuhi::{
 pub use uwuhi::service::discovery::*;
 
 pub struct AsyncDiscoverer {
-    sock: UdpSocket,
+    sock: Async<UdpSocket>,
     server: SocketAddr,
     domain: DomainName,
     retransmit_timeout: Duration,
@@ -39,7 +40,7 @@ impl AsyncDiscoverer {
             (Ipv4Addr::UNSPECIFIED, 0).into()
         };
         Ok(Self {
-            sock: UdpSocket::bind(bind_addr).await?,
+            sock: Async::<UdpSocket>::bind(bind_addr)?,
             server,
             domain,
             retransmit_timeout: Self::DEFAULT_RETRANSMIT_TIMEOUT,
@@ -242,15 +243,15 @@ impl AsyncDiscoverer {
                 }
 
                 let mut recv_buf = [0; MDNS_BUFFER_SIZE];
-                let (b, addr) = match future::timeout(
-                    self.retransmit_timeout,
-                    self.sock.recv_from(&mut recv_buf),
-                )
-                .await
-                {
+                let timeout = async {
+                    Timer::after(self.retransmit_timeout).await;
+                    Err(())
+                };
+                let recv = async { Ok(self.sock.recv_from(&mut recv_buf).await) };
+                let (b, addr) = match future::or(recv, timeout).await {
                     Ok(Ok(res)) => res,
-                    Err(_) => continue 'retransmit,
                     Ok(Err(e)) => return Err(e),
+                    Err(()) => continue 'retransmit,
                 };
                 let recv = &recv_buf[..b];
                 log::trace!("recv from {}: {}", addr, recv.escape_ascii());

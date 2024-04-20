@@ -1,18 +1,19 @@
 //! DNS name resolution.
 
 use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    io,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     time::Duration,
 };
 
+use async_io::{Async, Timer};
+use futures_lite::future;
 pub use uwuhi::resolver::*;
 use uwuhi::{name::DomainName, DNS_BUFFER_SIZE, MDNS_BUFFER_SIZE};
 
-use async_std::{io, net::UdpSocket};
-
 pub struct AsyncResolver {
     servers: Vec<SocketAddr>,
-    sock: UdpSocket,
+    sock: Async<UdpSocket>,
     ip_buf: Vec<IpAddr>,
     is_multicast: bool,
     timeout: Duration,
@@ -30,7 +31,7 @@ impl AsyncResolver {
         };
         Ok(Self {
             servers: vec![server],
-            sock: UdpSocket::bind(bind_addr).await?,
+            sock: Async::<UdpSocket>::bind(bind_addr)?,
             ip_buf: Vec::new(),
             is_multicast: bind_addr.ip().is_multicast(),
             timeout: Self::DEFAULT_TIMEOUT,
@@ -116,12 +117,16 @@ impl AsyncResolver {
 
         // FIXME: retransmit
         for addr in &self.servers {
-            self.sock.send_to(data, addr).await?;
+            self.sock.send_to(data, *addr).await?;
         }
 
         loop {
             let mut recv_buf = [0; DNS_BUFFER_SIZE];
-            let (b, addr) = io::timeout(self.timeout, self.sock.recv_from(&mut recv_buf)).await?;
+            let timeout = async {
+                Timer::after(self.timeout).await;
+                Err(io::ErrorKind::TimedOut.into())
+            };
+            let (b, addr) = future::or(self.sock.recv_from(&mut recv_buf), timeout).await?;
             let recv = &recv_buf[..b];
             log::trace!("recv from {}: {:x?}", addr, recv);
 

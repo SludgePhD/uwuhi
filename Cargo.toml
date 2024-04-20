@@ -1,3 +1,9 @@
+[workspace]
+members = [".", "uwuhi-async"]
+package.version = "0.4.1"
+dependencies.uwuhi = { version = "0.4.1", path = "." }
+# update these versions together ^
+
 [package]
 name = "uwuhi"
 version.workspace = true
@@ -16,9 +22,3 @@ log = "0.4.16"
 env_logger = "0.10.0"
 if-addrs = "0.10.1"
 expect-test = "1.4.1"
-
-[workspace]
-members = [".", "uwuhi-async"]
-package.version = "0.4.0"
-dependencies.uwuhi = { version = "0.4.0", path = "." }
-# update these versions together ^

@@ -1,8 +1,9 @@
 //! Service advertising.
 
+use std::net::UdpSocket;
 use std::{io, net::IpAddr};
 
-use async_std::net::UdpSocket;
+use async_io::Async;
 use uwuhi::{
     name::Label,
     service::{InstanceDetails, ServiceInstance},
@@ -14,7 +15,7 @@ pub use uwuhi::service::advertising::*;
 /// Asynchronous mDNS service advertiser and name server.
 pub struct AsyncAdvertiser {
     adv: Advertiser,
-    sock: UdpSocket,
+    sock: Async<UdpSocket>,
 }
 
 impl AsyncAdvertiser {
@@ -25,7 +26,7 @@ impl AsyncAdvertiser {
     pub fn new(hostname: Label, addr: IpAddr) -> io::Result<Self> {
         let adv = Advertiser::new(hostname, addr)?;
         Ok(Self {
-            sock: adv.create_socket()?.into(),
+            sock: Async::new(adv.create_socket()?)?,
             adv,
         })
     }

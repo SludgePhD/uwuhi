@@ -9,4 +9,5 @@ repository = "https://github.com/SludgePhD/uwuhi"
 [dependencies]
 uwuhi.workspace = true
 log = "0.4.17"
-async-std = "1.12.0"
+async-io = "2.3.2"
+futures-lite = "2.3.0"
