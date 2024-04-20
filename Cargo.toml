@@ -19,6 +19,6 @@ socket2 = "0.5.3"
 log = "0.4.16"
 
 [dev-dependencies]
-env_logger = "0.10.0"
-if-addrs = "0.10.1"
+env_logger = "0.11.3"
+if-addrs = "0.12.0"
 expect-test = "1.4.1"
