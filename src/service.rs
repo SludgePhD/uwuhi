@@ -3,6 +3,7 @@
 use std::{
     collections::{btree_map::Entry, BTreeMap},
     fmt,
+    str::FromStr,
 };
 
 use crate::{
@@ -33,6 +34,18 @@ impl ServiceTransport {
 
     pub fn to_label(&self) -> Label {
         Label::new(self.as_str())
+    }
+}
+
+impl FromStr for ServiceTransport {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "_tcp" => Ok(Self::TCP),
+            "_udp" => Ok(Self::Other),
+            _ => Err(Error::InvalidValue),
+        }
     }
 }
 
@@ -116,6 +129,10 @@ impl ServiceInstance {
     ///
     /// `service_name` must start with an underscore and is an agreed-upon identifier for the
     /// service being offered.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `service_name` does not start with an underscore (`_`).
     pub fn new(instance_name: Label, service_name: Label, transport: ServiceTransport) -> Self {
         Self {
             instance_name,
