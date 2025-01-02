@@ -127,22 +127,23 @@ impl Advertiser {
             instance_domain.clone(),
             Record::SRV(SRV::new(0, 0, details.port(), details.host().clone())),
         ));
-        if !details.txt_records().is_empty() {
-            self.db.entries.push(Entry::new(
-                instance_domain.clone(),
-                Record::TXT(TXT::new(details.txt_records().iter().map(
-                    |(k, v)| match v {
-                        TxtRecordValue::NoValue => k.as_bytes().to_vec(),
-                        TxtRecordValue::Value(v) => {
-                            let mut kv = k.as_bytes().to_vec();
-                            kv.push(b'=');
-                            kv.extend_from_slice(v);
-                            kv
-                        }
-                    },
-                ))),
-            ));
-        }
+        let txt = if details.txt_records().is_empty() {
+            // A TXT record is required by RFC 6763, even if it just contains an empty entry.
+            TXT::new([b""])
+        } else {
+            TXT::new(details.txt_records().iter().map(|(k, v)| match v {
+                TxtRecordValue::NoValue => k.as_bytes().to_vec(),
+                TxtRecordValue::Value(v) => {
+                    let mut kv = k.as_bytes().to_vec();
+                    kv.push(b'=');
+                    kv.extend_from_slice(v);
+                    kv
+                }
+            }))
+        };
+        self.db
+            .entries
+            .push(Entry::new(instance_domain.clone(), Record::TXT(txt)));
 
         self.db.entries.push(Entry::new(
             DomainName::from_iter([
