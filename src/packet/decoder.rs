@@ -144,11 +144,14 @@ impl<'a> Reader<'a> {
     fn read_question(&mut self) -> Result<Question, Error> {
         let qname = self.read_domain_name()?;
         let qtype = QType(self.read_u16()?);
-        let qclass = QClass(self.read_u16()?);
+        let qclass = self.read_u16()?;
+        let prefer_unicast = qclass & 0x8000 != 0;
+        let qclass = QClass(qclass & 0xff);
         Ok(Question {
             qname,
             qtype,
             qclass,
+            prefer_unicast,
         })
     }
 
@@ -553,6 +556,8 @@ pub struct Question {
     qname: DomainName,
     qtype: QType,
     qclass: QClass,
+    #[expect(dead_code)]
+    prefer_unicast: bool,
 }
 
 impl Question {
