@@ -1,7 +1,7 @@
 [workspace]
 members = [".", "uwuhi-async"]
-package.version = "0.4.1"
-dependencies.uwuhi = { version = "0.4.1", path = "." }
+package.version = "0.4.2"
+dependencies.uwuhi = { version = "0.4.2", path = "." }
 # update these versions together ^
 
 [package]
