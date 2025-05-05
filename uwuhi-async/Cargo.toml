@@ -1,10 +1,12 @@
 [package]
 name = "uwuhi-async"
-version.workspace = true
-edition = "2021"
 description = "Async mDNS Service Discovery implementation"
-license = "0BSD"
-repository = "https://github.com/SludgePhD/uwuhi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+categories.workspace = true
+keywords.workspace = true
 
 [dependencies]
 uwuhi.workspace = true

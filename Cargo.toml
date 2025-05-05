@@ -1,16 +1,24 @@
 [workspace]
 members = [".", "uwuhi-async"]
+package.categories = ["network-programming"]
+package.keywords = ["avahi", "multicast", "dns", "dns-sd"]
+package.license = "0BSD"
+package.repository = "https://github.com/SludgePhD/uwuhi"
+package.edition = "2021"
+
 package.version = "0.4.2"
 dependencies.uwuhi = { version = "0.4.2", path = "." }
 # update these versions together ^
 
 [package]
 name = "uwuhi"
-version.workspace = true
-edition = "2021"
 description = "mDNS Service Discovery implementation"
-license = "0BSD"
-repository = "https://github.com/SludgePhD/uwuhi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+categories.workspace = true
+keywords.workspace = true
 
 [dependencies]
 bitflags = "2.3.3"
