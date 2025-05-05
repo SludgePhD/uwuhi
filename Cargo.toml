@@ -6,8 +6,8 @@ package.license = "0BSD"
 package.repository = "https://github.com/SludgePhD/uwuhi"
 package.edition = "2021"
 
-package.version = "0.4.2"
-dependencies.uwuhi = { version = "0.4.2", path = "." }
+package.version = "0.4.3"
+dependencies.uwuhi = { version = "0.4.3", path = "." }
 # update these versions together ^
 
 [package]
